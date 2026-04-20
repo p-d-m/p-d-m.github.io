@@ -1,0 +1,4 @@
+baseURL = 'https://p-d-m.github.io/'
+locale = 'zh-cn'
+title = '老约翰的生活'
+theme = 'PaperMod'
