@@ -1,4 +1,14 @@
-baseURL = 'https://doc.jihw.top/'
-locale = 'zh-cn'
-title = '老约翰的生活'
-theme = 'PaperMod'
+baseURL = "https://doc.jihw.top/"
+languageCode = "zh"
+defaultContentLanguage = "zh"
+title = "老约翰的生活"
+theme = "PaperMod"
+
+[params]
+ShowReadingTime = true
+ShowPostNavLinks = true
+ShowBreadCrumbs = true
+ShowCodeCopyButtons = true
+ShowToc = true
+TocOpen = true
+defaultTheme = "auto"
