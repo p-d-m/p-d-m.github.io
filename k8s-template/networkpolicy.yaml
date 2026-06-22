@@ -1,0 +1,23 @@
+# NetworkPolicy 用来限制 Pod 之间的网络访问。
+# 需要 CNI 插件支持 NetworkPolicy 才会生效。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-demo-app
+  namespace: demo
+spec:
+  podSelector:
+    matchLabels:
+      app: demo-app
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # 允许同 Namespace 内带 role=frontend 标签的 Pod 访问。
+        - podSelector:
+            matchLabels:
+              role: frontend
+      ports:
+        - protocol: TCP
+          port: 80
+

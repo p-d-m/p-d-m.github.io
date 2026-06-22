@@ -1,0 +1,52 @@
+# StatefulSet 适合有状态应用，例如数据库、消息队列。
+# 它会提供稳定的 Pod 名称、网络标识和独立 PVC。
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: demo-db
+  namespace: demo
+spec:
+  # StatefulSet 需要一个 Headless Service 名称。
+  # 学习时可参考 service.yaml，把 spec.clusterIP 改成 None 来创建 Headless Service。
+  serviceName: demo-db-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: demo-db
+  template:
+    metadata:
+      labels:
+        app: demo-db
+    spec:
+      containers:
+        - name: db
+          image: postgres:18-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: demo
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: demo-secret
+                  key: DB_USERNAME
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: demo-secret
+                  key: DB_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: 10Gi

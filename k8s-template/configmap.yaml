@@ -1,0 +1,18 @@
+# ConfigMap 用来保存非敏感配置。
+# 敏感信息不要放 ConfigMap，应使用 Secret。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-config
+  namespace: demo
+data:
+  # 以环境变量方式读取。
+  APP_ENV: "dev"
+  LOG_LEVEL: "info"
+  # 也可以保存配置文件内容。
+  app.yaml: |
+    server:
+      port: 80
+    feature:
+      enabled: true
+

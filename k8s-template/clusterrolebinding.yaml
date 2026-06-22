@@ -1,0 +1,15 @@
+# ClusterRoleBinding 把 ClusterRole 绑定给用户、组或 ServiceAccount。
+# 下面示例允许 demo-reader ServiceAccount 读取集群 Node 信息。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: demo-node-reader-binding
+subjects:
+  - kind: ServiceAccount
+    name: demo-reader
+    namespace: demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: demo-node-reader
+

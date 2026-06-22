@@ -1,0 +1,11 @@
+# Namespace 用来隔离一组资源。
+# 常见做法：一个应用、一个环境或一个团队使用一个 Namespace。
+apiVersion: v1
+kind: Namespace
+metadata:
+  # Namespace 名称，全局唯一。
+  name: demo
+  labels:
+    # 标签便于后续筛选和策略匹配。
+    environment: dev
+

@@ -1,0 +1,608 @@
+<!doctype html><html lang=zh dir=auto data-theme=auto><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>K8s New Api | 老约翰的生活</title><meta name=keywords content><meta name=description content="漂亮，nginx Ingress 已经通了。下一步我们做 new-api 部署前准备，目标是先把 K8s 的运维基础补齐，再验证它能访问你已有的 PostgreSQL 和 Redis。
+接下来分 4 步：
+1. 安装 metrics-server
+2. 创建 new-api namespace
+3. 准备 Secret / ConfigMap
+4. 用临时 Pod 测试 PostgreSQL 和 Redis 连通性
+
+1. 安装 metrics-server
+作用：
+metrics-server 用来采集节点和 Pod 的 CPU、内存指标。
+安装后才能用 kubectl top nodes / kubectl top pods。
+安装：
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.1/components.yaml
+家庭自建 kubeadm 集群里，metrics-server 经常因为 kubelet 证书问题启动失败。先检查：
+kubectl get pods -n kube-system | grep metrics
+如果 Running，直接测试："><meta name=author content="老约翰"><link rel=canonical href=https://doc.jihw.top/coding/k8s-new-api/><link crossorigin=anonymous href=/assets/css/stylesheet.b35b113fca54f8cecacc2f081e6902277aef9219133abb4c640a086c0b41b0c6.css integrity="sha256-s1sRP8pU+M7KzC8IHmkCJ3rvkhkTOrtMZAoIbAtBsMY=" rel="preload stylesheet" as=style><link rel=icon href=https://doc.jihw.top/images/site-logo.png><link rel=icon type=image/png sizes=16x16 href=https://doc.jihw.top/images/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://doc.jihw.top/images/favicon-32x32.png><link rel=apple-touch-icon href=https://doc.jihw.top/images/apple-touch-icon.png><link rel=mask-icon href=https://doc.jihw.top/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=zh href=https://doc.jihw.top/coding/k8s-new-api/><noscript><style>#theme-toggle,.top-link{display:none}</style><style>@media(prefers-color-scheme:dark){:root{--theme:rgb(29, 30, 32);--entry:rgb(46, 46, 51);--primary:rgb(218, 218, 219);--secondary:rgb(155, 156, 157);--tertiary:rgb(65, 66, 68);--content:rgb(196, 196, 197);--code-block-bg:rgb(46, 46, 51);--code-bg:rgb(55, 56, 62);--border:rgb(51, 51, 51);color-scheme:dark}.list{background:var(--theme)}.toc{background:var(--entry)}}</style></noscript><script>localStorage.getItem("pref-theme")==="dark"?document.querySelector("html").dataset.theme="dark":localStorage.getItem("pref-theme")==="light"?document.querySelector("html").dataset.theme="light":window.matchMedia("(prefers-color-scheme: dark)").matches?document.querySelector("html").dataset.theme="dark":document.querySelector("html").dataset.theme="light"</script><meta property="og:url" content="https://doc.jihw.top/coding/k8s-new-api/"><meta property="og:site_name" content="老约翰的生活"><meta property="og:title" content="K8s New Api"><meta property="og:description" content="漂亮，nginx Ingress 已经通了。下一步我们做 new-api 部署前准备，目标是先把 K8s 的运维基础补齐，再验证它能访问你已有的 PostgreSQL 和 Redis。
+接下来分 4 步：
+1. 安装 metrics-server 2. 创建 new-api namespace 3. 准备 Secret / ConfigMap 4. 用临时 Pod 测试 PostgreSQL 和 Redis 连通性 1. 安装 metrics-server
+作用：
+metrics-server 用来采集节点和 Pod 的 CPU、内存指标。 安装后才能用 kubectl top nodes / kubectl top pods。 安装：
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.1/components.yaml 家庭自建 kubeadm 集群里，metrics-server 经常因为 kubelet 证书问题启动失败。先检查：
+kubectl get pods -n kube-system | grep metrics 如果 Running，直接测试："><meta property="og:locale" content="zh"><meta property="og:type" content="article"><meta property="article:section" content="coding"><meta property="article:published_time" content="2026-05-29T14:34:52+08:00"><meta property="article:modified_time" content="2026-05-29T14:34:52+08:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="K8s New Api"><meta name=twitter:description content="漂亮，nginx Ingress 已经通了。下一步我们做 new-api 部署前准备，目标是先把 K8s 的运维基础补齐，再验证它能访问你已有的 PostgreSQL 和 Redis。
+接下来分 4 步：
+1. 安装 metrics-server 2. 创建 new-api namespace 3. 准备 Secret / ConfigMap 4. 用临时 Pod 测试 PostgreSQL 和 Redis 连通性 1. 安装 metrics-server
+作用：
+metrics-server 用来采集节点和 Pod 的 CPU、内存指标。 安装后才能用 kubectl top nodes / kubectl top pods。 安装：
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.1/components.yaml 家庭自建 kubeadm 集群里，metrics-server 经常因为 kubelet 证书问题启动失败。先检查：
+kubectl get pods -n kube-system | grep metrics 如果 Running，直接测试："><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"编程技术","item":"https://doc.jihw.top/coding/"},{"@type":"ListItem","position":2,"name":"K8s New Api","item":"https://doc.jihw.top/coding/k8s-new-api/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"K8s New Api","name":"K8s New Api","description":"漂亮，nginx Ingress 已经通了。下一步我们做 new-api 部署前准备，目标是先把 K8s 的运维基础补齐，再验证它能访问你已有的 PostgreSQL 和 Redis。\n接下来分 4 步：\n1. 安装 metrics-server 2. 创建 new-api namespace 3. 准备 Secret / ConfigMap 4. 用临时 Pod 测试 PostgreSQL 和 Redis 连通性 1. 安装 metrics-server\n作用：\nmetrics-server 用来采集节点和 Pod 的 CPU、内存指标。 安装后才能用 kubectl top nodes / kubectl top pods。 安装：\nkubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.1/components.yaml 家庭自建 kubeadm 集群里，metrics-server 经常因为 kubelet 证书问题启动失败。先检查：\nkubectl get pods -n kube-system | grep metrics 如果 Running，直接测试：\n","keywords":[],"articleBody":"漂亮，nginx Ingress 已经通了。下一步我们做 new-api 部署前准备，目标是先把 K8s 的运维基础补齐，再验证它能访问你已有的 PostgreSQL 和 Redis。\n接下来分 4 步：\n1. 安装 metrics-server 2. 创建 new-api namespace 3. 准备 Secret / ConfigMap 4. 用临时 Pod 测试 PostgreSQL 和 Redis 连通性 1. 安装 metrics-server\n作用：\nmetrics-server 用来采集节点和 Pod 的 CPU、内存指标。 安装后才能用 kubectl top nodes / kubectl top pods。 安装：\nkubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.1/components.yaml 家庭自建 kubeadm 集群里，metrics-server 经常因为 kubelet 证书问题启动失败。先检查：\nkubectl get pods -n kube-system | grep metrics 如果 Running，直接测试：\nkubectl top nodes kubectl top pods -A 如果不正常，执行这个 patch：\nkubectl patch deployment metrics-server -n kube-system --type='json' -p='[ { \"op\": \"add\", \"path\": \"/spec/template/spec/containers/0/args/-\", \"value\": \"--kubelet-insecure-tls\" } ]' 等它重启：\nkubectl rollout status deployment metrics-server -n kube-system kubectl top nodes 下面按 Helm 简单版 来装 PostgreSQL 和 Redis。这个版本适合你当前阶段：先让 new-api 在 K8s 里跑起来，后面再升级数据库 HA、备份和 Operator。\n我们会放在同一个 namespace：\nnew-api 架构：\nnew-api Pod -\u003e postgresql.new-api.svc.cluster.local:5432 -\u003e redis-master.new-api.svc.cluster.local:6379 0. 先确认 StorageClass\nPostgreSQL 和 Redis 都需要 PVC。先看：\nkubectl get storageclass 如果有默认 StorageClass，会看到类似：\nlocal-path (default) 或者其他名字。\n如果没有默认 StorageClass，先暂停，把输出发我。因为没有 StorageClass，PostgreSQL/Redis 的 PVC 会一直 Pending。\n1. 创建 namespace\n如果已经创建过，会提示已存在，没关系。\nkubectl create namespace new-api 2. 添加 Bitnami Helm 仓库\nBitnami 官方现在推荐 OCI 方式，不一定需要 helm repo add。我们直接用 OCI：\noci://registry-1.docker.io/bitnamicharts/postgresql oci://registry-1.docker.io/bitnamicharts/redis Bitnami PostgreSQL 官方安装示例也是：\nhelm install my-release oci://registry-1.docker.io/bitnamicharts/postgresql 参考：Bitnami PostgreSQL Helm Chart。\n3. 准备密码\n建议你先生成几个密码：\nopenssl rand -base64 24 openssl rand -base64 24 openssl rand -base64 24 分别用于：\nPostgreSQL postgres 管理员密码 PostgreSQL newapi 用户密码 Redis 密码 假设你准备：\nPOSTGRES_ADMIN_PASSWORD=替换成你的管理员密码 POSTGRES_USER_PASSWORD=替换成你的 newapi 用户密码 REDIS_PASSWORD=替换成你的 Redis 密码 后面命令里手动替换。\n4. 安装 PostgreSQL\n这里创建：\n数据库：newapi 用户：newapi Service：postgresql.new-api.svc.cluster.local 端口：5432 PVC：20Gi 执行：\nhelm upgrade --install postgresql \\ oci://registry-1.docker.io/bitnamicharts/postgresql \\ --namespace new-api \\ --set auth.postgresPassword='替换成POSTGRES_ADMIN_PASSWORD' \\ --set auth.username='newapi' \\ --set auth.password='替换成POSTGRES_USER_PASSWORD' \\ --set auth.database='newapi' \\ --set primary.persistence.enabled=true \\ --set primary.persistence.size=20Gi 说明：\nauth.username/auth.password： 创建业务用户 newapi。 auth.database： 创建业务数据库 newapi。 primary.persistence.size： PostgreSQL 数据盘大小。 检查状态：\nkubectl get pods -n new-api -o wide kubectl get pvc -n new-api kubectl get svc -n new-api 等待 PostgreSQL Running：\nkubectl wait --for=condition=ready pod \\ -l app.kubernetes.io/instance=postgresql \\ -n new-api \\ --timeout=300s 测试连接：\nkubectl run pg-test \\ -n new-api \\ --rm -it \\ --image=postgres:16-alpine \\ --restart=Never \\ --env PGPASSWORD='替换成POSTGRES_USER_PASSWORD' \\ -- psql -h postgresql.new-api.svc.cluster.local -p 5432 -U newapi -d newapi -c 'select 1;' 成功会看到：\n?column? ---------- 1 5. 安装 Redis\n这里先用单实例 Redis：\n架构：standalone Service：redis-master.new-api.svc.cluster.local 端口：6379 PVC：8Gi 执行：\nhelm upgrade --install redis \\ oci://registry-1.docker.io/bitnamicharts/redis \\ --namespace new-api \\ --set architecture=standalone \\ --set auth.enabled=true \\ --set auth.password='替换成REDIS_PASSWORD' \\ --set master.persistence.enabled=true \\ --set master.persistence.size=8Gi 说明：\narchitecture=standalone： 单实例 Redis，学习阶段够用。 auth.password： Redis 访问密码。 master.persistence.size： Redis 数据盘大小。 检查：\nkubectl get pods -n new-api -o wide kubectl get pvc -n new-api kubectl get svc -n new-api 等待 Redis Running：\nkubectl wait --for=condition=ready pod \\ -l app.kubernetes.io/instance=redis \\ -n new-api \\ --timeout=300s 测试连接：\nkubectl run redis-test \\ -n new-api \\ --rm -it \\ --image=redis:7-alpine \\ --restart=Never \\ -- redis-cli -h redis-master.new-api.svc.cluster.local -p 6379 -a '替换成REDIS_PASSWORD' ping 成功会返回：\nPONG 6. 创建 new-api 要用的 Secret\n先生成两个固定密钥：\nopenssl rand -hex 32 openssl rand -hex 32 分别作为：\nSESSION_SECRET CRYPTO_SECRET 创建 Secret：\nkubectl create secret generic new-api-secret \\ -n new-api \\ --from-literal=SESSION_SECRET='TV6KasGSCn8lS4h48Jl86rEoQMolzNe5' \\ --from-literal=CRYPTO_SECRET='TV6KasGSCn8lS4h48Jl86rEoQMolzNe5' \\ --from-literal=SQL_DSN='postgresql://newapi:TV6KasGSCn8lS4h48Jl86rEoQMolzNe5@postgresql.new-api.svc.cluster.local:5432/newapi' \\ --from-literal=REDIS_CONN_STRING='redis://:TV6KasGSCn8lS4h48Jl86rEoQMolzNe5@redis-master.new-api.svc.cluster.local:6379/0' \\ --dry-run=client -o yaml | kubectl apply -f - 注意：SQL_DSN 里的密码要和你安装 PostgreSQL 时的：\nauth.password 一致。\n7. 创建 new-api 普通配置 ConfigMap\ncat \u003c\u003c'EOF' | kubectl apply -f - apiVersion: v1 kind: ConfigMap metadata: name: new-api-config namespace: new-api data: TZ: \"Asia/Shanghai\" STREAMING_TIMEOUT: \"300\" MAX_REQUEST_BODY_MB: \"32\" ERROR_LOG_ENABLED: \"true\" EOF 检查：\nkubectl get cm,secret -n new-api 8. 当前阶段完成标准\n执行：\nkubectl get pods -n new-api -o wide kubectl get pvc -n new-api kubectl get svc -n new-api 你应该看到：\npostgresql-0 Running redis-master-0 Running PVC Bound Service postgresql Service redis-master 连接测试：\nselect 1 成功 Redis PONG 成功 到这里，new-api 的数据库和缓存就准备好了。\n9. 常用查看命令\nPostgreSQL 日志：\nkubectl logs -n new-api statefulset/postgresql Redis 日志：\nkubectl logs -n new-api statefulset/redis-master 查看 Helm release：\nhelm list -n new-api 查看 PostgreSQL values：\nhelm get values postgresql -n new-api 查看 Redis values：\nhelm get values redis -n new-api 下一步我们就可以写：\nnew-api Deployment new-api Service new-api Ingress 先 1 副本跑通，然后再改 2-3 副本验证多副本。\n我看了你的博客，整理得挺清楚。现在下一步就是：部署 new-api 本体，也就是创建：\nDeployment Service Ingress 不过先改一个小点：new-api 官方文档里 PostgreSQL 的 SQL_DSN 推荐格式是：\npostgresql://user:password@host:5432/database 你博客里现在写的是：\nhost=postgresql.new-api.svc.cluster.local port=5432 ... 这个格式 PostgreSQL 驱动有时也能识别，但为了贴近 new-api 官方示例，建议改成 URL 格式。官方文档也写了 SQL_DSN、REDIS_CONN_STRING、SESSION_SECRET、CRYPTO_SECRET 这些变量；镜像用的是 calciumion/new-api:latest。参考：New API 环境变量文档、new-api GitHub README。\n假设你的密码变量还在当前 shell 里：\necho $POSTGRES_USER_PASSWORD echo $REDIS_PASSWORD 如果没有，就重新 export 一次。\n一、更新 Secret\nkubectl create secret generic new-api-secret \\ -n new-api \\ --from-literal=SESSION_SECRET='替换成你的SESSION_SECRET' \\ --from-literal=CRYPTO_SECRET='替换成你的CRYPTO_SECRET' \\ --from-literal=SQL_DSN='postgresql://newapi:替换成POSTGRES_USER_PASSWORD@postgresql.new-api.svc.cluster.local:5432/newapi' \\ --from-literal=REDIS_CONN_STRING='redis://:替换成REDIS_PASSWORD@redis-master.new-api.svc.cluster.local:6379/0' \\ --dry-run=client -o yaml | kubectl apply -f - 注意：如果密码里有 @、:、/、#、?、\u0026 这类字符，URL 里可能需要转义。学习阶段建议密码先用字母数字下划线，少踩坑。\n二、创建 new-api 的 PVC\ncat \u003c\u003c'EOF' | kubectl apply -f - apiVersion: v1 kind: PersistentVolumeClaim metadata: name: new-api-data namespace: new-api spec: accessModes: - ReadWriteOnce storageClassName: longhorn resources: requests: storage: 5Gi EOF 三、部署 new-api\ncat \u003c\u003c'EOF' | kubectl apply -f - apiVersion: apps/v1 kind: Deployment metadata: name: new-api namespace: new-api spec: replicas: 1 selector: matchLabels: app: new-api template: metadata: labels: app: new-api spec: containers: - name: new-api image: calciumion/new-api:latest imagePullPolicy: IfNotPresent args: - \"--log-dir\" - \"/app/logs\" ports: - containerPort: 3000 envFrom: - configMapRef: name: new-api-config - secretRef: name: new-api-secret env: - name: NODE_NAME valueFrom: fieldRef: fieldPath: metadata.name volumeMounts: - name: data mountPath: /data - name: logs mountPath: /app/logs readinessProbe: httpGet: path: /api/status port: 3000 initialDelaySeconds: 20 periodSeconds: 10 timeoutSeconds: 3 failureThreshold: 6 livenessProbe: httpGet: path: /api/status port: 3000 initialDelaySeconds: 60 periodSeconds: 30 timeoutSeconds: 5 failureThreshold: 3 volumes: - name: data persistentVolumeClaim: claimName: new-api-data - name: logs emptyDir: {} EOF 四、创建 Service\ncat \u003c\u003c'EOF' | kubectl apply -f - apiVersion: v1 kind: Service metadata: name: new-api namespace: new-api spec: type: ClusterIP selector: app: new-api ports: - name: http port: 3000 targetPort: 3000 EOF 五、创建 Ingress\ncat \u003c\u003c'EOF' | kubectl apply -f - apiVersion: networking.k8s.io/v1 kind: Ingress metadata: name: new-api namespace: new-api spec: ingressClassName: nginx rules: - host: k8s-ai.jihw.top http: paths: - path: / pathType: Prefix backend: service: name: new-api port: number: 3000 EOF 六、检查状态\nkubectl get pods -n new-api -o wide kubectl get svc -n new-api kubectl get ingress -n new-api kubectl logs -n new-api deploy/new-api --tail=100 集群内测试：\n如果你的 MetalLB 外部访问还是有问题，就先用 NodePort 访问 ingress-nginx：\ncurl -I -H \"Host: k8s-ai.jihw.top\" http://192.168.3.214:32658 浏览器访问的话，Win11 hosts 暂时写：\n192.168.3.214 k8s-ai.jihw.top 然后打开：\nhttp://k8s-ai.jihw.top:32658 等单副本访问成功、初始化后台成功之后，再考虑扩成 2 副本。现在先别急着多副本，先把 new-api 跑起来。\n是的，要优化成：域名绑定一个会漂移的业务 VIP，而不是绑定某一台节点 IP。\n推荐架构：\nnew-api.k8s.local ↓ 192.168.3.231 业务 VIP，由 keepalived 漂移 ↓ HAProxy ↓ ingress-nginx NodePort 192.168.3.214:32658 192.168.3.215:32658 192.168.3.216:32658 以后 Win11 hosts 只写：\n192.168.3.231 new-api.k8s.local 访问：\nhttp://new-api.k8s.local 即使 192.168.3.214 关闭，VIP 漂移到其他节点，也还能访问。\n一、先确认 NodePort\n在任意 master 执行：\nkubectl get svc -n ingress-nginx ingress-nginx-controller 确认类似：\n80:32658/TCP 443:31847/TCP 下面我按你现在的端口 32658、31847 写。\n二、三个节点都配置 HAProxy\n在 192.168.3.214、192.168.3.215、192.168.3.216 都执行：\nsudo sysctl -w net.ipv4.ip_nonlocal_bind=1 echo 'net.ipv4.ip_nonlocal_bind=1' | sudo tee /etc/sysctl.d/99-haproxy-nonlocal-bind.conf sudo sysctl --system 在文件末尾追加：\nsudo tee -a /etc/haproxy/haproxy.cfg \u003e/dev/null \u003c\u003c'EOF' frontend ingress_http_vip bind 192.168.3.231:80 mode tcp option tcplog default_backend ingress_http_nodeport backend ingress_http_nodeport mode tcp balance roundrobin option tcp-check server k8s-master1 192.168.3.214:32467 check server k8s-master2 192.168.3.215:32467 check server k8s-master3 192.168.3.216:32467 check frontend ingress_https_vip bind 192.168.3.231:443 mode tcp option tcplog default_backend ingress_https_nodeport backend ingress_https_nodeport mode tcp balance roundrobin option tcp-check server k8s-master1 192.168.3.214:32419 check server k8s-master2 192.168.3.215:32419 check server k8s-master3 192.168.3.216:32419 check EOF 检查并重载：\nsudo haproxy -c -f /etc/haproxy/haproxy.cfg sudo systemctl reload haproxy 三、三个节点都配置 keepalived 业务 VIP\n先查看网卡名：\nip route get 192.168.3.1 你会看到类似：\ndev ens33 记住这个网卡名，下面假设是 ens33，如果你的不是，就替换。\n编辑：\n不要删原来的 API VIP 配置，在末尾追加一个新的 vrrp_instance。\nk8s-master1 / 192.168.3.214：\nsudo tee -a /etc/keepalived/keepalived.conf \u003e/dev/null \u003c\u003c'EOF' vrrp_instance VI_INGRESS { state MASTER interface ens33 virtual_router_id 52 priority 120 advert_int 1 authentication { auth_type PASS auth_pass ingressvip } virtual_ipaddress { 192.168.3.231 } } EOF k8s-master2 / 192.168.3.215：\nsudo tee -a /etc/keepalived/keepalived.conf \u003e/dev/null \u003c\u003c'EOF' vrrp_instance VI_INGRESS { state BACKUP interface ens33 virtual_router_id 52 priority 110 advert_int 1 authentication { auth_type PASS auth_pass ingressvip } virtual_ipaddress { 192.168.3.231 } } EOF k8s-master3 / 192.168.3.216：\nsudo tee -a /etc/keepalived/keepalived.conf \u003e/dev/null \u003c\u003c'EOF' vrrp_instance VI_INGRESS { state BACKUP interface ens33 virtual_router_id 52 priority 100 advert_int 1 authentication { auth_type PASS auth_pass ingressvip } virtual_ipaddress { 192.168.3.231 } } EOF 然后三个节点都执行：\nsudo systemctl restart keepalived sudo systemctl status keepalived --no-pager 四、测试 VIP\n在任意节点执行：\nip a | grep 192.168.3.231 正常只会有一台机器持有这个 VIP。\n在 Win11 hosts 里改成：\n192.168.3.231 k8s-ai.jihw.top 192.168.3.231 longhorn.k8s.local 然后访问：\nhttp://k8s-ai.jihw.top/setup 测试端口：\nTest-NetConnection 192.168.3.231 -Port 80 高可用测试：\n# 关掉当前持有 192.168.3.231 的那台节点 sudo systemctl stop keepalived 然后在另一台节点看：\nip a | grep 192.168.3.231 如果 VIP 漂移成功，Win11 继续访问：\nhttp://new-api.k8s.local 这套方案比你现在的 192.168.3.214:32658 好很多：域名绑定的是业务 VIP，后端任意一台节点挂掉，HAProxy 会自动跳过；当前持有 VIP 的节点挂掉，keepalived 会把入口漂移到另一台。\n自定义域名证书 可以，下一步分两段做：先把 HTTP 域名访问跑通，再做 Let’s Encrypt HTTPS 证书。\n先确认你现在的入口链路是：\nk8s-ai.jihw.top -\u003e 192.168.3.231 -\u003e HAProxy -\u003e ingress-nginx NodePort -\u003e new-api 一、先改 new-api Ingress 域名\n在 master 节点执行：\ncat \u003c\u003c'EOF' | kubectl apply -f - apiVersion: networking.k8s.io/v1 kind: Ingress metadata: name: new-api namespace: new-api spec: ingressClassName: nginx rules: - host: k8s-ai.jihw.top http: paths: - path: / pathType: Prefix backend: service: name: new-api port: number: 3000 EOF 检查：\nkubectl get ingress -n new-api 然后在 Win11 测试：\nTest-NetConnection k8s-ai.jihw.top -Port 80 浏览器访问：\nhttp://k8s-ai.jihw.top/setup 如果能打开，说明域名入口已经正常。\n二、安装 cert-manager\n如果你还没装 cert-manager，执行：\nkubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.20.2/cert-manager.yaml 等待启动：\nkubectl get pods -n cert-manager 三个 Pod 都 Running 后再继续。\n三、安装阿里云 DNS webhook\nhelm repo add cert-manager-alidns-webhook https://devmachine-fr.github.io/cert-manager-alidns-webhook helm repo update helm upgrade --install alidns-webhook \\ cert-manager-alidns-webhook/alidns-webhook \\ -n cert-manager \\ --set groupName=jihw.top 检查：\nkubectl get pods -n cert-manager 四、创建阿里云 DNS AccessKey Secret\n建议在阿里云 RAM 创建专用 AccessKey，先给 AliyunDNSFullAccess，后面熟悉后再收窄权限。\nkubectl create secret generic alidns-secret \\ -n cert-manager \\ --from-literal=access-key-id='你的AccessKeyId' \\ --from-literal=access-key-secret='你的AccessKeySecret' 注意这里放在 cert-manager 命名空间。\n五、创建 Let’s Encrypt Prod ClusterIssuer\n这里直接使用正式证书。注意两点：\n1. email 必须换成真实邮箱，不能写“你的邮箱”这种中文占位。 2. 这里安装的是 devmachine-fr/cert-manager-alidns-webhook 0.3.1， webhook 配置字段要用 accessTokenSecretRef / secretKeySecretRef。 如果字段写成 accessKeyIdRef / accessKeySecretRef，Challenge 会报类似错误：\nfailed to load secret \"cert-manager/\": resource name may not be empty 创建正式证书 Issuer：\ncat \u003c\u003c'EOF' | kubectl apply -f - apiVersion: cert-manager.io/v1 kind: ClusterIssuer metadata: name: letsencrypt-alidns-prod spec: acme: email: 2455191080@qq.com server: https://acme-v02.api.letsencrypt.org/directory privateKeySecretRef: name: letsencrypt-alidns-prod-account-key solvers: - dns01: webhook: groupName: jihw.top solverName: alidns-solver config: regionId: cn-hangzhou accessTokenSecretRef: name: alidns-secret key: access-key-id secretKeySecretRef: name: alidns-secret key: access-key-secret EOF 检查 Issuer：\nkubectl get clusterissuer letsencrypt-alidns-prod 应该看到：\nREADY True 如果不是 True，先看原因：\nkubectl describe clusterissuer letsencrypt-alidns-prod kubectl -n cert-manager logs deploy/cert-manager --tail=100 六、给 Ingress 加 TLS 并申请证书\n下面这个 Ingress 会自动创建名为 k8s-ai-jihw-top-tls 的 Certificate，并把证书保存到同名 Secret。\ncat \u003c\u003c'EOF' | kubectl apply -f - apiVersion: networking.k8s.io/v1 kind: Ingress metadata: name: new-api namespace: new-api annotations: cert-manager.io/cluster-issuer: letsencrypt-alidns-prod spec: ingressClassName: nginx tls: - hosts: - k8s-ai.jihw.top secretName: k8s-ai-jihw-top-tls rules: - host: k8s-ai.jihw.top http: paths: - path: / pathType: Prefix backend: service: name: new-api port: number: 3000 EOF 查看申请状态：\nkubectl get certificate -n new-api kubectl get certificaterequest,order,challenge -n new-api kubectl describe certificate k8s-ai-jihw-top-tls -n new-api 正常流程大概是：\nCertificateRequest Approved=True Order pending -\u003e valid Challenge pending -\u003e valid Certificate Ready=True 成功后会看到 TLS Secret：\nkubectl get secret k8s-ai-jihw-top-tls -n new-api 也可以看证书有效期：\nkubectl describe certificate k8s-ai-jihw-top-tls -n new-api | grep -E \"Not Before|Not After|Renewal Time|Ready\" 七、测试 HTTPS\nTest-NetConnection k8s-ai.jihw.top -Port 443 浏览器访问：\nhttps://k8s-ai.jihw.top 再看状态：\nkubectl get certificate -n new-api kubectl describe certificate k8s-ai-jihw-top-tls -n new-api 八、以后申请其他域名证书\n以后只要 cert-manager、alidns-webhook、alidns-secret、letsencrypt-alidns-prod 都已经存在，就不需要重复安装。只需要给新的服务写 Ingress。\n假设要给 api.example.com 申请证书，命名空间是 demo，服务名是 demo-api，端口是 3000：\ncat \u003c\u003c'EOF' | kubectl apply -f - apiVersion: networking.k8s.io/v1 kind: Ingress metadata: name: demo-api namespace: demo annotations: cert-manager.io/cluster-issuer: letsencrypt-alidns-prod spec: ingressClassName: nginx tls: - hosts: - api.example.com secretName: api-example-com-tls rules: - host: api.example.com http: paths: - path: / pathType: Prefix backend: service: name: demo-api port: number: 3000 EOF 然后查对应命名空间：\nkubectl get certificate -n demo kubectl get certificaterequest,order,challenge -n demo kubectl describe certificate api-example-com-tls -n demo 九、常见问题排查\n如果 Certificate 一直是 False，先看这几个：\nkubectl get clusterissuer letsencrypt-alidns-prod kubectl describe clusterissuer letsencrypt-alidns-prod kubectl get certificate -A kubectl get certificaterequest,order,challenge -A kubectl describe challenge -n new-api kubectl -n cert-manager logs deploy/cert-manager --tail=200 kubectl -n cert-manager logs deploy/alidns-webhook --tail=200 如果看到：\nReferenced issuer does not have a Ready status condition 说明 ClusterIssuer 还没 Ready，常见原因是邮箱写错，尤其不能写中文占位。\n如果看到：\nfailed to load secret \"cert-manager/\": resource name may not be empty 说明 alidns webhook 字段名写错了。当前这个 webhook 要写：\naccessTokenSecretRef: name: alidns-secret key: access-key-id secretKeySecretRef: name: alidns-secret key: access-key-secret 如果改过 ClusterIssuer 后，旧的 Challenge 一直卡在删除中，可以清理旧资源再让 cert-manager 重建：\nkubectl -n new-api delete challenge --all --wait=false kubectl -n new-api delete order --all --wait=false kubectl -n new-api delete certificaterequest --all --wait=false 如果某个旧 Challenge 有 finalizer 卡住，而且确认它没有成功写入 DNS 记录，可以移除 finalizer：\nkubectl -n new-api patch challenge \\ --type=json \\ -p='[{\"op\":\"remove\",\"path\":\"/metadata/finalizers\"}]' DNS-01 成功写入后，可以用下面命令看 TXT 记录传播：\ndig +short TXT _acme-challenge.k8s-ai.jihw.top @223.5.5.5 dig +short TXT _acme-challenge.k8s-ai.jihw.top @8.8.8.8 后续申请其他域名时，优先复用 letsencrypt-alidns-prod，只需要新增或修改对应服务的 Ingress。\n","wordCount":"1899","inLanguage":"zh","datePublished":"2026-05-29T14:34:52+08:00","dateModified":"2026-05-29T14:34:52+08:00","author":{"@type":"Person","name":"老约翰"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://doc.jihw.top/coding/k8s-new-api/"},"publisher":{"@type":"Organization","name":"老约翰的生活","logo":{"@type":"ImageObject","url":"https://doc.jihw.top/images/site-logo.png"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=/ accesskey=h title="老约翰的生活 (Alt + H)"><img src=/images/site-logo.png alt aria-label=logo height=36>老约翰的生活</a><div class=logo-switches><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></div><ul id=menu class=menu><li><a href=/search/ title="搜索 (Alt + /)" accesskey=/><span>搜索</span></a></li><li><a href=/ai/ title=人工智能><span>人工智能</span></a></li><li><a href=/coding/ title=编程技术><span>编程技术</span></a></li><li><a href=/learning/ title=广泛学习><span>广泛学习</span></a></li></ul></nav></header><main class=main><article class=post-single><header class=post-header><nav class=breadcrumbs role=navigation aria-label=Breadcrumb><a href=/>主页</a>
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevron-right"><polyline points="9 18 15 12 9 6"/></svg>
+<a href=/coding/>编程技术</a></nav><h1 class="post-title entry-hint-parent">K8s New Api</h1><div class=post-meta><span title='2026-05-29 14:34:52 +0800 +0800'>发布时间：2026年5月29日</span>&nbsp;·&nbsp;<span>预计阅读：9 分钟</span>&nbsp;·&nbsp;<span>老约翰</span></div></header><details class=toc open><summary accesskey=c title="(Alt + C)"><span class=title>目录</span></summary><div class=inner><ul><li><a href=#%e8%87%aa%e5%ae%9a%e4%b9%89%e5%9f%9f%e5%90%8d%e8%af%81%e4%b9%a6 aria-label=自定义域名证书>自定义域名证书</a></li></ul></div></details><div class="post-content md-content"><p>漂亮，<code>nginx Ingress</code> 已经通了。下一步我们做 <strong>new-api 部署前准备</strong>，目标是先把 K8s 的运维基础补齐，再验证它能访问你已有的 PostgreSQL 和 Redis。</p><p>接下来分 4 步：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>1. 安装 metrics-server
+</span></span><span style=display:flex><span>2. 创建 new-api namespace
+</span></span><span style=display:flex><span>3. 准备 Secret / ConfigMap
+</span></span><span style=display:flex><span>4. 用临时 Pod 测试 PostgreSQL 和 Redis 连通性
+</span></span></code></pre></div><hr><p><strong>1. 安装 metrics-server</strong></p><p>作用：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>metrics-server 用来采集节点和 Pod 的 CPU、内存指标。
+</span></span><span style=display:flex><span>安装后才能用 kubectl top nodes / kubectl top pods。
+</span></span></code></pre></div><p>安装：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.1/components.yaml
+</span></span></code></pre></div><p>家庭自建 kubeadm 集群里，metrics-server 经常因为 kubelet 证书问题启动失败。先检查：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n kube-system | grep metrics
+</span></span></code></pre></div><p>如果 Running，直接测试：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl top nodes
+</span></span><span style=display:flex><span>kubectl top pods -A
+</span></span></code></pre></div><p>如果不正常，执行这个 patch：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl patch deployment metrics-server -n kube-system --type<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;json&#39;</span> -p<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;[
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    &#34;op&#34;: &#34;add&#34;,
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    &#34;path&#34;: &#34;/spec/template/spec/containers/0/args/-&#34;,
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    &#34;value&#34;: &#34;--kubelet-insecure-tls&#34;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>]&#39;</span>
+</span></span></code></pre></div><p>等它重启：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl rollout status deployment metrics-server -n kube-system
+</span></span><span style=display:flex><span>kubectl top nodes
+</span></span></code></pre></div><hr><p>下面按 <strong>Helm 简单版</strong> 来装 PostgreSQL 和 Redis。这个版本适合你当前阶段：先让 <code>new-api</code> 在 K8s 里跑起来，后面再升级数据库 HA、备份和 Operator。</p><p>我们会放在同一个 namespace：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>new-api
+</span></span></code></pre></div><p>架构：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>new-api Pod
+</span></span><span style=display:flex><span>  -&gt; postgresql.new-api.svc.cluster.local:5432
+</span></span><span style=display:flex><span>  -&gt; redis-master.new-api.svc.cluster.local:6379
+</span></span></code></pre></div><hr><p><strong>0. 先确认 StorageClass</strong></p><p>PostgreSQL 和 Redis 都需要 PVC。先看：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get storageclass
+</span></span></code></pre></div><p>如果有默认 StorageClass，会看到类似：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>local-path (default)
+</span></span></code></pre></div><p>或者其他名字。</p><p>如果没有默认 StorageClass，先暂停，把输出发我。因为没有 StorageClass，PostgreSQL/Redis 的 PVC 会一直 Pending。</p><hr><p><strong>1. 创建 namespace</strong></p><p>如果已经创建过，会提示已存在，没关系。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl create namespace new-api
+</span></span></code></pre></div><hr><p><strong>2. 添加 Bitnami Helm 仓库</strong></p><p>Bitnami 官方现在推荐 OCI 方式，不一定需要 <code>helm repo add</code>。我们直接用 OCI：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>oci://registry-1.docker.io/bitnamicharts/postgresql
+</span></span><span style=display:flex><span>oci://registry-1.docker.io/bitnamicharts/redis
+</span></span></code></pre></div><p>Bitnami PostgreSQL 官方安装示例也是：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>helm install my-release oci://registry-1.docker.io/bitnamicharts/postgresql
+</span></span></code></pre></div><p>参考：<a href=https://bitnami.com/stack/postgresql/helm>Bitnami PostgreSQL Helm Chart</a>。</p><hr><p><strong>3. 准备密码</strong></p><p>建议你先生成几个密码：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>openssl rand -base64 <span style=color:#ae81ff>24</span>
+</span></span><span style=display:flex><span>openssl rand -base64 <span style=color:#ae81ff>24</span>
+</span></span><span style=display:flex><span>openssl rand -base64 <span style=color:#ae81ff>24</span>
+</span></span></code></pre></div><p>分别用于：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>PostgreSQL postgres 管理员密码
+</span></span><span style=display:flex><span>PostgreSQL newapi 用户密码
+</span></span><span style=display:flex><span>Redis 密码
+</span></span></code></pre></div><p>假设你准备：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>POSTGRES_ADMIN_PASSWORD=替换成你的管理员密码
+</span></span><span style=display:flex><span>POSTGRES_USER_PASSWORD=替换成你的 newapi 用户密码
+</span></span><span style=display:flex><span>REDIS_PASSWORD=替换成你的 Redis 密码
+</span></span></code></pre></div><p>后面命令里手动替换。</p><hr><p><strong>4. 安装 PostgreSQL</strong></p><p>这里创建：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>数据库：newapi
+</span></span><span style=display:flex><span>用户：newapi
+</span></span><span style=display:flex><span>Service：postgresql.new-api.svc.cluster.local
+</span></span><span style=display:flex><span>端口：5432
+</span></span><span style=display:flex><span>PVC：20Gi
+</span></span></code></pre></div><p>执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>helm upgrade --install postgresql <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  oci://registry-1.docker.io/bitnamicharts/postgresql <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --namespace new-api <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set auth.postgresPassword<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;替换成POSTGRES_ADMIN_PASSWORD&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set auth.username<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;newapi&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set auth.password<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;替换成POSTGRES_USER_PASSWORD&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set auth.database<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;newapi&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set primary.persistence.enabled<span style=color:#f92672>=</span>true <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set primary.persistence.size<span style=color:#f92672>=</span>20Gi
+</span></span></code></pre></div><p>说明：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>auth.username/auth.password：
+</span></span><span style=display:flex><span>创建业务用户 newapi。
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>auth.database：
+</span></span><span style=display:flex><span>创建业务数据库 newapi。
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>primary.persistence.size：
+</span></span><span style=display:flex><span>PostgreSQL 数据盘大小。
+</span></span></code></pre></div><p>检查状态：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n new-api -o wide
+</span></span><span style=display:flex><span>kubectl get pvc -n new-api
+</span></span><span style=display:flex><span>kubectl get svc -n new-api
+</span></span></code></pre></div><p>等待 PostgreSQL Running：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl wait --for<span style=color:#f92672>=</span>condition<span style=color:#f92672>=</span>ready pod <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -l app.kubernetes.io/instance<span style=color:#f92672>=</span>postgresql <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -n new-api <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --timeout<span style=color:#f92672>=</span>300s
+</span></span></code></pre></div><p>测试连接：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl run pg-test <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -n new-api <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --rm -it <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --image<span style=color:#f92672>=</span>postgres:16-alpine <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --restart<span style=color:#f92672>=</span>Never <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --env PGPASSWORD<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;替换成POSTGRES_USER_PASSWORD&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -- psql -h postgresql.new-api.svc.cluster.local -p <span style=color:#ae81ff>5432</span> -U newapi -d newapi -c <span style=color:#e6db74>&#39;select 1;&#39;</span>
+</span></span></code></pre></div><p>成功会看到：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span> ?column?
+</span></span><span style=display:flex><span>----------
+</span></span><span style=display:flex><span>        1
+</span></span></code></pre></div><hr><p><strong>5. 安装 Redis</strong></p><p>这里先用单实例 Redis：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>架构：standalone
+</span></span><span style=display:flex><span>Service：redis-master.new-api.svc.cluster.local
+</span></span><span style=display:flex><span>端口：6379
+</span></span><span style=display:flex><span>PVC：8Gi
+</span></span></code></pre></div><p>执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>helm upgrade --install redis <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  oci://registry-1.docker.io/bitnamicharts/redis <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --namespace new-api <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set architecture<span style=color:#f92672>=</span>standalone <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set auth.enabled<span style=color:#f92672>=</span>true <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set auth.password<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;替换成REDIS_PASSWORD&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set master.persistence.enabled<span style=color:#f92672>=</span>true <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set master.persistence.size<span style=color:#f92672>=</span>8Gi
+</span></span></code></pre></div><p>说明：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>architecture=standalone：
+</span></span><span style=display:flex><span>单实例 Redis，学习阶段够用。
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>auth.password：
+</span></span><span style=display:flex><span>Redis 访问密码。
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>master.persistence.size：
+</span></span><span style=display:flex><span>Redis 数据盘大小。
+</span></span></code></pre></div><p>检查：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n new-api -o wide
+</span></span><span style=display:flex><span>kubectl get pvc -n new-api
+</span></span><span style=display:flex><span>kubectl get svc -n new-api
+</span></span></code></pre></div><p>等待 Redis Running：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl wait --for<span style=color:#f92672>=</span>condition<span style=color:#f92672>=</span>ready pod <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -l app.kubernetes.io/instance<span style=color:#f92672>=</span>redis <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -n new-api <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --timeout<span style=color:#f92672>=</span>300s
+</span></span></code></pre></div><p>测试连接：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl run redis-test <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -n new-api <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --rm -it <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --image<span style=color:#f92672>=</span>redis:7-alpine <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --restart<span style=color:#f92672>=</span>Never <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -- redis-cli -h redis-master.new-api.svc.cluster.local -p <span style=color:#ae81ff>6379</span> -a <span style=color:#e6db74>&#39;替换成REDIS_PASSWORD&#39;</span> ping
+</span></span></code></pre></div><p>成功会返回：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>PONG
+</span></span></code></pre></div><hr><p><strong>6. 创建 new-api 要用的 Secret</strong></p><p>先生成两个固定密钥：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>openssl rand -hex <span style=color:#ae81ff>32</span>
+</span></span><span style=display:flex><span>openssl rand -hex <span style=color:#ae81ff>32</span>
+</span></span></code></pre></div><p>分别作为：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>SESSION_SECRET
+</span></span><span style=display:flex><span>CRYPTO_SECRET
+</span></span></code></pre></div><p>创建 Secret：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl create secret generic new-api-secret <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -n new-api <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --from-literal<span style=color:#f92672>=</span>SESSION_SECRET<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;TV6KasGSCn8lS4h48Jl86rEoQMolzNe5&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --from-literal<span style=color:#f92672>=</span>CRYPTO_SECRET<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;TV6KasGSCn8lS4h48Jl86rEoQMolzNe5&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --from-literal<span style=color:#f92672>=</span>SQL_DSN<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;postgresql://newapi:TV6KasGSCn8lS4h48Jl86rEoQMolzNe5@postgresql.new-api.svc.cluster.local:5432/newapi&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --from-literal<span style=color:#f92672>=</span>REDIS_CONN_STRING<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;redis://:TV6KasGSCn8lS4h48Jl86rEoQMolzNe5@redis-master.new-api.svc.cluster.local:6379/0&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --dry-run<span style=color:#f92672>=</span>client -o yaml | kubectl apply -f -
+</span></span></code></pre></div><p>注意：<code>SQL_DSN</code> 里的密码要和你安装 PostgreSQL 时的：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>auth.password
+</span></span></code></pre></div><p>一致。</p><hr><p><strong>7. 创建 new-api 普通配置 ConfigMap</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39; | kubectl apply -f -
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>apiVersion: v1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>kind: ConfigMap
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>metadata:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  name: new-api-config
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  namespace: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>data:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  TZ: &#34;Asia/Shanghai&#34;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  STREAMING_TIMEOUT: &#34;300&#34;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  MAX_REQUEST_BODY_MB: &#34;32&#34;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  ERROR_LOG_ENABLED: &#34;true&#34;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p>检查：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get cm,secret -n new-api
+</span></span></code></pre></div><hr><p><strong>8. 当前阶段完成标准</strong></p><p>执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n new-api -o wide
+</span></span><span style=display:flex><span>kubectl get pvc -n new-api
+</span></span><span style=display:flex><span>kubectl get svc -n new-api
+</span></span></code></pre></div><p>你应该看到：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>postgresql-0 Running
+</span></span><span style=display:flex><span>redis-master-0 Running
+</span></span><span style=display:flex><span>PVC Bound
+</span></span><span style=display:flex><span>Service postgresql
+</span></span><span style=display:flex><span>Service redis-master
+</span></span></code></pre></div><p>连接测试：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span><span style=color:#66d9ef>select</span> <span style=color:#ae81ff>1</span> 成功
+</span></span><span style=display:flex><span>Redis PONG 成功
+</span></span></code></pre></div><p>到这里，new-api 的数据库和缓存就准备好了。</p><hr><p><strong>9. 常用查看命令</strong></p><p>PostgreSQL 日志：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl logs -n new-api statefulset/postgresql
+</span></span></code></pre></div><p>Redis 日志：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl logs -n new-api statefulset/redis-master
+</span></span></code></pre></div><p>查看 Helm release：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>helm list -n new-api
+</span></span></code></pre></div><p>查看 PostgreSQL values：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>helm get values postgresql -n new-api
+</span></span></code></pre></div><p>查看 Redis values：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>helm get values redis -n new-api
+</span></span></code></pre></div><hr><p>下一步我们就可以写：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>new-api Deployment
+</span></span><span style=display:flex><span>new-api Service
+</span></span><span style=display:flex><span>new-api Ingress
+</span></span></code></pre></div><p>先 1 副本跑通，然后再改 2-3 副本验证多副本。</p><p>我看了你的博客，整理得挺清楚。现在下一步就是：<strong>部署 new-api 本体</strong>，也就是创建：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>Deployment
+</span></span><span style=display:flex><span>Service
+</span></span><span style=display:flex><span>Ingress
+</span></span></code></pre></div><p>不过先改一个小点：new-api 官方文档里 PostgreSQL 的 <code>SQL_DSN</code> 推荐格式是：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>postgresql://user:password@host:5432/database
+</span></span></code></pre></div><p>你博客里现在写的是：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>host=postgresql.new-api.svc.cluster.local port=5432 ...
+</span></span></code></pre></div><p>这个格式 PostgreSQL 驱动有时也能识别，但为了贴近 new-api 官方示例，建议改成 URL 格式。官方文档也写了 <code>SQL_DSN</code>、<code>REDIS_CONN_STRING</code>、<code>SESSION_SECRET</code>、<code>CRYPTO_SECRET</code> 这些变量；镜像用的是 <code>calciumion/new-api:latest</code>。参考：<a href=https://docs.newapi.pro/zh/docs/installation/config-maintenance/environment-variables>New API 环境变量文档</a>、<a href=https://github.com/QuantumNous/new-api>new-api GitHub README</a>。</p><p>假设你的密码变量还在当前 shell 里：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>echo $POSTGRES_USER_PASSWORD
+</span></span><span style=display:flex><span>echo $REDIS_PASSWORD
+</span></span></code></pre></div><p>如果没有，就重新 export 一次。</p><p><strong>一、更新 Secret</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl create secret generic new-api-secret <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -n new-api <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --from-literal<span style=color:#f92672>=</span>SESSION_SECRET<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;替换成你的SESSION_SECRET&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --from-literal<span style=color:#f92672>=</span>CRYPTO_SECRET<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;替换成你的CRYPTO_SECRET&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --from-literal<span style=color:#f92672>=</span>SQL_DSN<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;postgresql://newapi:替换成POSTGRES_USER_PASSWORD@postgresql.new-api.svc.cluster.local:5432/newapi&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --from-literal<span style=color:#f92672>=</span>REDIS_CONN_STRING<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;redis://:替换成REDIS_PASSWORD@redis-master.new-api.svc.cluster.local:6379/0&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --dry-run<span style=color:#f92672>=</span>client -o yaml | kubectl apply -f -
+</span></span></code></pre></div><p>注意：如果密码里有 <code>@</code>、<code>:</code>、<code>/</code>、<code>#</code>、<code>?</code>、<code>&</code> 这类字符，URL 里可能需要转义。学习阶段建议密码先用字母数字下划线，少踩坑。</p><p><strong>二、创建 new-api 的 PVC</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39; | kubectl apply -f -
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>apiVersion: v1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>kind: PersistentVolumeClaim
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>metadata:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  name: new-api-data
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  namespace: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>spec:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  accessModes:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    - ReadWriteOnce
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  storageClassName: longhorn
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  resources:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    requests:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      storage: 5Gi
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p><strong>三、部署 new-api</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39; | kubectl apply -f -
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>apiVersion: apps/v1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>kind: Deployment
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>metadata:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  name: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  namespace: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>spec:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  replicas: 1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  selector:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    matchLabels:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      app: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  template:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    metadata:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      labels:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        app: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    spec:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      containers:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        - name: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          image: calciumion/new-api:latest
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          imagePullPolicy: IfNotPresent
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          args:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            - &#34;--log-dir&#34;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            - &#34;/app/logs&#34;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          ports:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            - containerPort: 3000
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          envFrom:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            - configMapRef:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                name: new-api-config
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            - secretRef:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                name: new-api-secret
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          env:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            - name: NODE_NAME
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              valueFrom:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                fieldRef:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                  fieldPath: metadata.name
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          volumeMounts:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            - name: data
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              mountPath: /data
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            - name: logs
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              mountPath: /app/logs
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          readinessProbe:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            httpGet:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              path: /api/status
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              port: 3000
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            initialDelaySeconds: 20
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            periodSeconds: 10
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            timeoutSeconds: 3
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            failureThreshold: 6
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          livenessProbe:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            httpGet:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              path: /api/status
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              port: 3000
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            initialDelaySeconds: 60
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            periodSeconds: 30
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            timeoutSeconds: 5
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            failureThreshold: 3
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      volumes:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        - name: data
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          persistentVolumeClaim:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            claimName: new-api-data
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        - name: logs
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          emptyDir: {}
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p><strong>四、创建 Service</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39; | kubectl apply -f -
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>apiVersion: v1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>kind: Service
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>metadata:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  name: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  namespace: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>spec:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  type: ClusterIP
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  selector:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    app: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  ports:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    - name: http
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      port: 3000
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      targetPort: 3000
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p><strong>五、创建 Ingress</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39; | kubectl apply -f -
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>apiVersion: networking.k8s.io/v1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>kind: Ingress
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>metadata:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  name: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  namespace: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>spec:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  ingressClassName: nginx
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  rules:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    - host: k8s-ai.jihw.top
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      http:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        paths:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          - path: /
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            pathType: Prefix
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            backend:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              service:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                name: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                port:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                  number: 3000
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p><strong>六、检查状态</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n new-api -o wide
+</span></span><span style=display:flex><span>kubectl get svc -n new-api
+</span></span><span style=display:flex><span>kubectl get ingress -n new-api
+</span></span><span style=display:flex><span>kubectl logs -n new-api deploy/new-api --tail<span style=color:#f92672>=</span><span style=color:#ae81ff>100</span>
+</span></span></code></pre></div><p>集群内测试：</p><p>如果你的 MetalLB 外部访问还是有问题，就先用 NodePort 访问 ingress-nginx：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>curl -I -H <span style=color:#e6db74>&#34;Host: k8s-ai.jihw.top&#34;</span> http://192.168.3.214:32658
+</span></span></code></pre></div><p>浏览器访问的话，Win11 hosts 暂时写：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.214 k8s-ai.jihw.top
+</span></span></code></pre></div><p>然后打开：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>http://k8s-ai.jihw.top:32658
+</span></span></code></pre></div><p>等单副本访问成功、初始化后台成功之后，再考虑扩成 2 副本。现在先别急着多副本，先把 new-api 跑起来。</p><p>是的，要优化成：<strong>域名绑定一个会漂移的业务 VIP，而不是绑定某一台节点 IP</strong>。</p><p>推荐架构：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>new-api.k8s.local
+</span></span><span style=display:flex><span>        ↓
+</span></span><span style=display:flex><span>192.168.3.231  业务 VIP，由 keepalived 漂移
+</span></span><span style=display:flex><span>        ↓
+</span></span><span style=display:flex><span>HAProxy
+</span></span><span style=display:flex><span>        ↓
+</span></span><span style=display:flex><span>ingress-nginx NodePort
+</span></span><span style=display:flex><span>192.168.3.214:32658
+</span></span><span style=display:flex><span>192.168.3.215:32658
+</span></span><span style=display:flex><span>192.168.3.216:32658
+</span></span></code></pre></div><p>以后 Win11 hosts 只写：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.231 new-api.k8s.local
+</span></span></code></pre></div><p>访问：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>http://new-api.k8s.local
+</span></span></code></pre></div><p>即使 <code>192.168.3.214</code> 关闭，VIP 漂移到其他节点，也还能访问。</p><p><strong>一、先确认 NodePort</strong></p><p>在任意 master 执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get svc -n ingress-nginx ingress-nginx-controller
+</span></span></code></pre></div><p>确认类似：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>80:32658/TCP
+</span></span><span style=display:flex><span>443:31847/TCP
+</span></span></code></pre></div><p>下面我按你现在的端口 <code>32658</code>、<code>31847</code> 写。</p><p><strong>二、三个节点都配置 HAProxy</strong></p><p>在 <code>192.168.3.214</code>、<code>192.168.3.215</code>、<code>192.168.3.216</code> 都执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo sysctl -w net.ipv4.ip_nonlocal_bind<span style=color:#f92672>=</span><span style=color:#ae81ff>1</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>echo <span style=color:#e6db74>&#39;net.ipv4.ip_nonlocal_bind=1&#39;</span> | sudo tee /etc/sysctl.d/99-haproxy-nonlocal-bind.conf
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo sysctl --system
+</span></span></code></pre></div><p><span class=post-image-wrap data-watermark=老约翰的生活><img alt=映射端口 loading=lazy src=/coding/k8s-new-api/image.png></span></p><p>在文件末尾追加：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo tee -a /etc/haproxy/haproxy.cfg &gt;/dev/null <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>frontend ingress_http_vip
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    bind 192.168.3.231:80
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    mode tcp
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    option tcplog
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    default_backend ingress_http_nodeport
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>backend ingress_http_nodeport
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    mode tcp
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    balance roundrobin
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    option tcp-check
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    server k8s-master1 192.168.3.214:32467 check
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    server k8s-master2 192.168.3.215:32467 check
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    server k8s-master3 192.168.3.216:32467 check
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>frontend ingress_https_vip
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    bind 192.168.3.231:443
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    mode tcp
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    option tcplog
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    default_backend ingress_https_nodeport
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>backend ingress_https_nodeport
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    mode tcp
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    balance roundrobin
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    option tcp-check
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    server k8s-master1 192.168.3.214:32419 check
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    server k8s-master2 192.168.3.215:32419 check
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    server k8s-master3 192.168.3.216:32419 check
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p>检查并重载：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo haproxy -c -f /etc/haproxy/haproxy.cfg
+</span></span><span style=display:flex><span>sudo systemctl reload haproxy
+</span></span></code></pre></div><p><strong>三、三个节点都配置 keepalived 业务 VIP</strong></p><p>先查看网卡名：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>ip route get 192.168.3.1
+</span></span></code></pre></div><p>你会看到类似：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>dev ens33
+</span></span></code></pre></div><p>记住这个网卡名，下面假设是 <code>ens33</code>，如果你的不是，就替换。</p><p>编辑：</p><p>不要删原来的 API VIP 配置，在末尾追加一个新的 <code>vrrp_instance</code>。</p><p><code>k8s-master1 / 192.168.3.214</code>：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo tee -a /etc/keepalived/keepalived.conf &gt;/dev/null <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>vrrp_instance VI_INGRESS {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    state MASTER
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    interface ens33
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    virtual_router_id 52
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    priority 120
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    advert_int 1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    authentication {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        auth_type PASS
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        auth_pass ingressvip
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    virtual_ipaddress {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        192.168.3.231
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>}
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p><code>k8s-master2 / 192.168.3.215</code>：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo tee -a /etc/keepalived/keepalived.conf &gt;/dev/null <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>vrrp_instance VI_INGRESS {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    state BACKUP
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    interface ens33
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    virtual_router_id 52
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    priority 110
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    advert_int 1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    authentication {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        auth_type PASS
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        auth_pass ingressvip
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    virtual_ipaddress {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        192.168.3.231
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>}
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p><code>k8s-master3 / 192.168.3.216</code>：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo tee -a /etc/keepalived/keepalived.conf &gt;/dev/null <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>vrrp_instance VI_INGRESS {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    state BACKUP
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    interface ens33
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    virtual_router_id 52
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    priority 100
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    advert_int 1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    authentication {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        auth_type PASS
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        auth_pass ingressvip
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    virtual_ipaddress {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        192.168.3.231
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>}
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p>然后三个节点都执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo systemctl restart keepalived
+</span></span><span style=display:flex><span>sudo systemctl status keepalived --no-pager
+</span></span></code></pre></div><p><strong>四、测试 VIP</strong></p><p>在任意节点执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>ip a | grep 192.168.3.231
+</span></span></code></pre></div><p>正常只会有一台机器持有这个 VIP。</p><p>在 Win11 hosts 里改成：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.231 k8s-ai.jihw.top
+</span></span><span style=display:flex><span>192.168.3.231 longhorn.k8s.local
+</span></span></code></pre></div><p>然后访问：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>http://k8s-ai.jihw.top/setup
+</span></span></code></pre></div><p>测试端口：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-powershell data-lang=powershell><span style=display:flex><span>Test-NetConnection <span style=color:#ae81ff>192.168</span>.3.231 -Port <span style=color:#ae81ff>80</span>
+</span></span></code></pre></div><p>高可用测试：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span><span style=color:#75715e># 关掉当前持有 192.168.3.231 的那台节点</span>
+</span></span><span style=display:flex><span>sudo systemctl stop keepalived
+</span></span></code></pre></div><p>然后在另一台节点看：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>ip a | grep 192.168.3.231
+</span></span></code></pre></div><p>如果 VIP 漂移成功，Win11 继续访问：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>http://new-api.k8s.local
+</span></span></code></pre></div><p>这套方案比你现在的 <code>192.168.3.214:32658</code> 好很多：域名绑定的是业务 VIP，后端任意一台节点挂掉，HAProxy 会自动跳过；当前持有 VIP 的节点挂掉，keepalived 会把入口漂移到另一台。</p><h2 id=自定义域名证书>自定义域名证书<a hidden class=anchor aria-hidden=true href=#自定义域名证书>#</a></h2><p>可以，下一步分两段做：<strong>先把 HTTP 域名访问跑通</strong>，再做 <strong>Let’s Encrypt HTTPS 证书</strong>。</p><p>先确认你现在的入口链路是：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>k8s-ai.jihw.top -&gt; 192.168.3.231 -&gt; HAProxy -&gt; ingress-nginx NodePort -&gt; new-api
+</span></span></code></pre></div><p><strong>一、先改 new-api Ingress 域名</strong></p><p>在 master 节点执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39; | kubectl apply -f -
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>apiVersion: networking.k8s.io/v1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>kind: Ingress
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>metadata:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  name: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  namespace: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>spec:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  ingressClassName: nginx
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  rules:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    - host: k8s-ai.jihw.top
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      http:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        paths:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          - path: /
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            pathType: Prefix
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            backend:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              service:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                name: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                port:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                  number: 3000
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p>检查：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get ingress -n new-api
+</span></span></code></pre></div><p>然后在 Win11 测试：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-powershell data-lang=powershell><span style=display:flex><span>Test-NetConnection k8s-ai.jihw.top -Port <span style=color:#ae81ff>80</span>
+</span></span></code></pre></div><p>浏览器访问：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>http://k8s-ai.jihw.top/setup
+</span></span></code></pre></div><p>如果能打开，说明域名入口已经正常。</p><p><strong>二、安装 cert-manager</strong></p><p>如果你还没装 cert-manager，执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.20.2/cert-manager.yaml
+</span></span></code></pre></div><p>等待启动：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n cert-manager
+</span></span></code></pre></div><p>三个 Pod 都 Running 后再继续。</p><p><strong>三、安装阿里云 DNS webhook</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>helm repo add cert-manager-alidns-webhook https://devmachine-fr.github.io/cert-manager-alidns-webhook
+</span></span><span style=display:flex><span>helm repo update
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>helm upgrade --install alidns-webhook <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  cert-manager-alidns-webhook/alidns-webhook <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -n cert-manager <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set groupName<span style=color:#f92672>=</span>jihw.top
+</span></span></code></pre></div><p>检查：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n cert-manager
+</span></span></code></pre></div><p><strong>四、创建阿里云 DNS AccessKey Secret</strong></p><p>建议在阿里云 RAM 创建专用 AccessKey，先给 <code>AliyunDNSFullAccess</code>，后面熟悉后再收窄权限。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl create secret generic alidns-secret <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -n cert-manager <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --from-literal<span style=color:#f92672>=</span>access-key-id<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;你的AccessKeyId&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --from-literal<span style=color:#f92672>=</span>access-key-secret<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;你的AccessKeySecret&#39;</span>
+</span></span></code></pre></div><p>注意这里放在 <code>cert-manager</code> 命名空间。</p><p><strong>五、创建 Let’s Encrypt Prod ClusterIssuer</strong></p><p>这里直接使用正式证书。注意两点：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>1. email 必须换成真实邮箱，不能写“你的邮箱”这种中文占位。
+</span></span><span style=display:flex><span>2. 这里安装的是 devmachine-fr/cert-manager-alidns-webhook 0.3.1，
+</span></span><span style=display:flex><span>   webhook 配置字段要用 accessTokenSecretRef / secretKeySecretRef。
+</span></span></code></pre></div><p>如果字段写成 <code>accessKeyIdRef</code> / <code>accessKeySecretRef</code>，Challenge 会报类似错误：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>failed to load secret &#34;cert-manager/&#34;: resource name may not be empty
+</span></span></code></pre></div><p>创建正式证书 Issuer：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39; | kubectl apply -f -
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>apiVersion: cert-manager.io/v1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>kind: ClusterIssuer
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>metadata:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  name: letsencrypt-alidns-prod
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>spec:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  acme:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    email: 2455191080@qq.com
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    server: https://acme-v02.api.letsencrypt.org/directory
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    privateKeySecretRef:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      name: letsencrypt-alidns-prod-account-key
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    solvers:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      - dns01:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          webhook:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            groupName: jihw.top
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            solverName: alidns-solver
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            config:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              regionId: cn-hangzhou
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              accessTokenSecretRef:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                name: alidns-secret
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                key: access-key-id
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              secretKeySecretRef:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                name: alidns-secret
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                key: access-key-secret
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p>检查 Issuer：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get clusterissuer letsencrypt-alidns-prod
+</span></span></code></pre></div><p>应该看到：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>READY   True
+</span></span></code></pre></div><p>如果不是 <code>True</code>，先看原因：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl describe clusterissuer letsencrypt-alidns-prod
+</span></span><span style=display:flex><span>kubectl -n cert-manager logs deploy/cert-manager --tail<span style=color:#f92672>=</span><span style=color:#ae81ff>100</span>
+</span></span></code></pre></div><p><strong>六、给 Ingress 加 TLS 并申请证书</strong></p><p>下面这个 Ingress 会自动创建名为 <code>k8s-ai-jihw-top-tls</code> 的 Certificate，并把证书保存到同名 Secret。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39; | kubectl apply -f -
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>apiVersion: networking.k8s.io/v1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>kind: Ingress
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>metadata:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  name: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  namespace: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  annotations:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    cert-manager.io/cluster-issuer: letsencrypt-alidns-prod
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>spec:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  ingressClassName: nginx
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  tls:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    - hosts:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        - k8s-ai.jihw.top
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      secretName: k8s-ai-jihw-top-tls
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  rules:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    - host: k8s-ai.jihw.top
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      http:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        paths:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          - path: /
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            pathType: Prefix
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            backend:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              service:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                name: new-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                port:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                  number: 3000
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p>查看申请状态：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get certificate -n new-api
+</span></span><span style=display:flex><span>kubectl get certificaterequest,order,challenge -n new-api
+</span></span><span style=display:flex><span>kubectl describe certificate k8s-ai-jihw-top-tls -n new-api
+</span></span></code></pre></div><p>正常流程大概是：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>CertificateRequest  Approved=True
+</span></span><span style=display:flex><span>Order               pending -&gt; valid
+</span></span><span style=display:flex><span>Challenge           pending -&gt; valid
+</span></span><span style=display:flex><span>Certificate         Ready=True
+</span></span></code></pre></div><p>成功后会看到 TLS Secret：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get secret k8s-ai-jihw-top-tls -n new-api
+</span></span></code></pre></div><p>也可以看证书有效期：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl describe certificate k8s-ai-jihw-top-tls -n new-api | grep -E <span style=color:#e6db74>&#34;Not Before|Not After|Renewal Time|Ready&#34;</span>
+</span></span></code></pre></div><p><strong>七、测试 HTTPS</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-powershell data-lang=powershell><span style=display:flex><span>Test-NetConnection k8s-ai.jihw.top -Port <span style=color:#ae81ff>443</span>
+</span></span></code></pre></div><p>浏览器访问：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>https://k8s-ai.jihw.top
+</span></span></code></pre></div><p>再看状态：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get certificate -n new-api
+</span></span><span style=display:flex><span>kubectl describe certificate k8s-ai-jihw-top-tls -n new-api
+</span></span></code></pre></div><p><strong>八、以后申请其他域名证书</strong></p><p>以后只要 cert-manager、alidns-webhook、<code>alidns-secret</code>、<code>letsencrypt-alidns-prod</code> 都已经存在，就不需要重复安装。只需要给新的服务写 Ingress。</p><p>假设要给 <code>api.example.com</code> 申请证书，命名空间是 <code>demo</code>，服务名是 <code>demo-api</code>，端口是 <code>3000</code>：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39; | kubectl apply -f -
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>apiVersion: networking.k8s.io/v1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>kind: Ingress
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>metadata:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  name: demo-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  namespace: demo
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  annotations:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    cert-manager.io/cluster-issuer: letsencrypt-alidns-prod
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>spec:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  ingressClassName: nginx
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  tls:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    - hosts:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        - api.example.com
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      secretName: api-example-com-tls
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  rules:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    - host: api.example.com
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      http:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        paths:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          - path: /
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            pathType: Prefix
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            backend:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              service:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                name: demo-api
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                port:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                  number: 3000
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p>然后查对应命名空间：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get certificate -n demo
+</span></span><span style=display:flex><span>kubectl get certificaterequest,order,challenge -n demo
+</span></span><span style=display:flex><span>kubectl describe certificate api-example-com-tls -n demo
+</span></span></code></pre></div><p><strong>九、常见问题排查</strong></p><p>如果 Certificate 一直是 <code>False</code>，先看这几个：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get clusterissuer letsencrypt-alidns-prod
+</span></span><span style=display:flex><span>kubectl describe clusterissuer letsencrypt-alidns-prod
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>kubectl get certificate -A
+</span></span><span style=display:flex><span>kubectl get certificaterequest,order,challenge -A
+</span></span><span style=display:flex><span>kubectl describe challenge -n new-api
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>kubectl -n cert-manager logs deploy/cert-manager --tail<span style=color:#f92672>=</span><span style=color:#ae81ff>200</span>
+</span></span><span style=display:flex><span>kubectl -n cert-manager logs deploy/alidns-webhook --tail<span style=color:#f92672>=</span><span style=color:#ae81ff>200</span>
+</span></span></code></pre></div><p>如果看到：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>Referenced issuer does not have a Ready status condition
+</span></span></code></pre></div><p>说明 <code>ClusterIssuer</code> 还没 Ready，常见原因是邮箱写错，尤其不能写中文占位。</p><p>如果看到：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>failed to load secret &#34;cert-manager/&#34;: resource name may not be empty
+</span></span></code></pre></div><p>说明 alidns webhook 字段名写错了。当前这个 webhook 要写：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-yaml data-lang=yaml><span style=display:flex><span><span style=color:#f92672>accessTokenSecretRef</span>:
+</span></span><span style=display:flex><span>  <span style=color:#f92672>name</span>: <span style=color:#ae81ff>alidns-secret</span>
+</span></span><span style=display:flex><span>  <span style=color:#f92672>key</span>: <span style=color:#ae81ff>access-key-id</span>
+</span></span><span style=display:flex><span><span style=color:#f92672>secretKeySecretRef</span>:
+</span></span><span style=display:flex><span>  <span style=color:#f92672>name</span>: <span style=color:#ae81ff>alidns-secret</span>
+</span></span><span style=display:flex><span>  <span style=color:#f92672>key</span>: <span style=color:#ae81ff>access-key-secret</span>
+</span></span></code></pre></div><p>如果改过 <code>ClusterIssuer</code> 后，旧的 Challenge 一直卡在删除中，可以清理旧资源再让 cert-manager 重建：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl -n new-api delete challenge --all --wait<span style=color:#f92672>=</span>false
+</span></span><span style=display:flex><span>kubectl -n new-api delete order --all --wait<span style=color:#f92672>=</span>false
+</span></span><span style=display:flex><span>kubectl -n new-api delete certificaterequest --all --wait<span style=color:#f92672>=</span>false
+</span></span></code></pre></div><p>如果某个旧 Challenge 有 finalizer 卡住，而且确认它没有成功写入 DNS 记录，可以移除 finalizer：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl -n new-api patch challenge &lt;challenge-name&gt; <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --type<span style=color:#f92672>=</span>json <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -p<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;[{&#34;op&#34;:&#34;remove&#34;,&#34;path&#34;:&#34;/metadata/finalizers&#34;}]&#39;</span>
+</span></span></code></pre></div><p>DNS-01 成功写入后，可以用下面命令看 TXT 记录传播：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>dig +short TXT _acme-challenge.k8s-ai.jihw.top @223.5.5.5
+</span></span><span style=display:flex><span>dig +short TXT _acme-challenge.k8s-ai.jihw.top @8.8.8.8
+</span></span></code></pre></div><p>后续申请其他域名时，优先复用 <code>letsencrypt-alidns-prod</code>，只需要新增或修改对应服务的 Ingress。</p></div><footer class=post-footer><ul class=post-tags></ul><nav class=paginav><a class=prev href=/coding/k8s-longhorn/><span class=title>« 上一页</span>
+<span>K8s Longhorn</span>
+</a><a class=next href=/coding/ubuntu-getting-started/><span class=title>下一页 »</span>
+<span>Ubuntu Getting Started</span></a></nav></footer></article></main><footer class=footer><span>&copy; 2026 <a href=/>老约翰的生活</a></span> ·
+<span>Powered by
+<a href=https://gohugo.io/ rel="noopener noreferrer" target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script defer src=https://static.cloudflareinsights.com/beacon.min.js data-cf-beacon='{"token":"5e6d89f81ac94c789c577458cbb90e0b"}'></script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10)),menu.onscroll=function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)}}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var t=this.getAttribute("href").substr(1);window.matchMedia("(prefers-reduced-motion: reduce)").matches?document.querySelector(`[id='${decodeURIComponent(t)}']`).scrollIntoView():document.querySelector(`[id='${decodeURIComponent(t)}']`).scrollIntoView({behavior:"smooth"}),t==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${t}`)})})</script><script>var toplink=document.getElementById("top-link");window.onscroll=function(){const e=window.innerHeight;document.body.scrollTop>e||document.documentElement.scrollTop>e?toplink.classList.remove("hidden"):toplink.classList.add("hidden")}</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="复制";function s(){t.innerHTML="已复制！",setTimeout(()=>{t.innerHTML="复制"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

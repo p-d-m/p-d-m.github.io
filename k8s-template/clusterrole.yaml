@@ -1,0 +1,16 @@
+# ClusterRole 定义集群级权限，或者可被多个 Namespace 复用的权限模板。
+# 谨慎授予集群级权限，避免业务 Pod 拥有过大权限。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: demo-node-reader
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+

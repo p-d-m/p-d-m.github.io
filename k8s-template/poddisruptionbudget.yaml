@@ -1,0 +1,14 @@
+# PDB 用来限制自愿驱逐时的不可用副本数量。
+# 例如节点维护、kubectl drain 时，避免一次性驱逐太多 Pod。
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: demo-app
+  namespace: demo
+spec:
+  # 至少保持 2 个 Pod 可用。
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: demo-app
+

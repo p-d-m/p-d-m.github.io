@@ -1,0 +1,634 @@
+<!doctype html><html lang=zh dir=auto data-theme=auto><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>K8s入门教程 | 老约翰的生活</title><meta name=keywords content><meta name=description content="三主节点高可用
+3 台机器全部做 control-plane
+3 个 etcd 组成 stacked etcd
+HAProxy + Keepalived 提供 API Server 虚拟 IP
+containerd 作为容器运行时
+规划：
+192.168.3.214  k8s-master1
+192.168.3.215  k8s-master2
+192.168.3.216  k8s-master3
+192.168.3.217  k8s-vip
+API 入口用：
+192.168.3.217:8443
+不用 6443 是因为 HAProxy 和 kube-apiserver 都在同一批机器上，避免端口冲突。
+
+快捷部署（脚本版）
+如果你想先快速把三主节点 HA 集群跑起来，可以直接用我整理好的脚本。脚本放在仓库的 static/k8s 目录，站点发布后访问路径是 /k8s/脚本名。
+脚本默认使用这组地址：
+192.168.3.214  k8s-master1
+192.168.3.215  k8s-master2
+192.168.3.216  k8s-master3
+192.168.3.217  k8s-vip
+Kubernetes: v1.36
+API 入口: 192.168.3.217:8443
+如果 IP、VIP、Kubernetes 版本不一样，先改 k8s_env.sh，或者执行脚本时通过环境变量覆盖：
+MASTER1_IP=192.168.3.214 \
+MASTER2_IP=192.168.3.215 \
+MASTER3_IP=192.168.3.216 \
+VIP_IP=192.168.3.217 \
+K8S_VERSION=v1.36 \
+bash k8s_prepare.sh
+1. 下载脚本
+如果你在这份文档仓库里，可以直接进入脚本目录："><meta name=author content="老约翰"><link rel=canonical href=https://doc.jihw.top/coding/k8s-getting-started/><link crossorigin=anonymous href=/assets/css/stylesheet.b35b113fca54f8cecacc2f081e6902277aef9219133abb4c640a086c0b41b0c6.css integrity="sha256-s1sRP8pU+M7KzC8IHmkCJ3rvkhkTOrtMZAoIbAtBsMY=" rel="preload stylesheet" as=style><link rel=icon href=https://doc.jihw.top/images/site-logo.png><link rel=icon type=image/png sizes=16x16 href=https://doc.jihw.top/images/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://doc.jihw.top/images/favicon-32x32.png><link rel=apple-touch-icon href=https://doc.jihw.top/images/apple-touch-icon.png><link rel=mask-icon href=https://doc.jihw.top/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=zh href=https://doc.jihw.top/coding/k8s-getting-started/><noscript><style>#theme-toggle,.top-link{display:none}</style><style>@media(prefers-color-scheme:dark){:root{--theme:rgb(29, 30, 32);--entry:rgb(46, 46, 51);--primary:rgb(218, 218, 219);--secondary:rgb(155, 156, 157);--tertiary:rgb(65, 66, 68);--content:rgb(196, 196, 197);--code-block-bg:rgb(46, 46, 51);--code-bg:rgb(55, 56, 62);--border:rgb(51, 51, 51);color-scheme:dark}.list{background:var(--theme)}.toc{background:var(--entry)}}</style></noscript><script>localStorage.getItem("pref-theme")==="dark"?document.querySelector("html").dataset.theme="dark":localStorage.getItem("pref-theme")==="light"?document.querySelector("html").dataset.theme="light":window.matchMedia("(prefers-color-scheme: dark)").matches?document.querySelector("html").dataset.theme="dark":document.querySelector("html").dataset.theme="light"</script><meta property="og:url" content="https://doc.jihw.top/coding/k8s-getting-started/"><meta property="og:site_name" content="老约翰的生活"><meta property="og:title" content="K8s入门教程"><meta property="og:description" content="三主节点高可用 3 台机器全部做 control-plane 3 个 etcd 组成 stacked etcd HAProxy + Keepalived 提供 API Server 虚拟 IP containerd 作为容器运行时 规划：
+192.168.3.214 k8s-master1 192.168.3.215 k8s-master2 192.168.3.216 k8s-master3 192.168.3.217 k8s-vip API 入口用：
+192.168.3.217:8443 不用 6443 是因为 HAProxy 和 kube-apiserver 都在同一批机器上，避免端口冲突。
+快捷部署（脚本版） 如果你想先快速把三主节点 HA 集群跑起来，可以直接用我整理好的脚本。脚本放在仓库的 static/k8s 目录，站点发布后访问路径是 /k8s/脚本名。
+脚本默认使用这组地址：
+192.168.3.214 k8s-master1 192.168.3.215 k8s-master2 192.168.3.216 k8s-master3 192.168.3.217 k8s-vip Kubernetes: v1.36 API 入口: 192.168.3.217:8443 如果 IP、VIP、Kubernetes 版本不一样，先改 k8s_env.sh，或者执行脚本时通过环境变量覆盖：
+MASTER1_IP=192.168.3.214 \ MASTER2_IP=192.168.3.215 \ MASTER3_IP=192.168.3.216 \ VIP_IP=192.168.3.217 \ K8S_VERSION=v1.36 \ bash k8s_prepare.sh 1. 下载脚本 如果你在这份文档仓库里，可以直接进入脚本目录："><meta property="og:locale" content="zh"><meta property="og:type" content="article"><meta property="article:section" content="coding"><meta property="article:published_time" content="2026-05-28T17:52:06+08:00"><meta property="article:modified_time" content="2026-05-28T17:52:06+08:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="K8s入门教程"><meta name=twitter:description content="三主节点高可用 3 台机器全部做 control-plane 3 个 etcd 组成 stacked etcd HAProxy + Keepalived 提供 API Server 虚拟 IP containerd 作为容器运行时 规划：
+192.168.3.214 k8s-master1 192.168.3.215 k8s-master2 192.168.3.216 k8s-master3 192.168.3.217 k8s-vip API 入口用：
+192.168.3.217:8443 不用 6443 是因为 HAProxy 和 kube-apiserver 都在同一批机器上，避免端口冲突。
+快捷部署（脚本版） 如果你想先快速把三主节点 HA 集群跑起来，可以直接用我整理好的脚本。脚本放在仓库的 static/k8s 目录，站点发布后访问路径是 /k8s/脚本名。
+脚本默认使用这组地址：
+192.168.3.214 k8s-master1 192.168.3.215 k8s-master2 192.168.3.216 k8s-master3 192.168.3.217 k8s-vip Kubernetes: v1.36 API 入口: 192.168.3.217:8443 如果 IP、VIP、Kubernetes 版本不一样，先改 k8s_env.sh，或者执行脚本时通过环境变量覆盖：
+MASTER1_IP=192.168.3.214 \ MASTER2_IP=192.168.3.215 \ MASTER3_IP=192.168.3.216 \ VIP_IP=192.168.3.217 \ K8S_VERSION=v1.36 \ bash k8s_prepare.sh 1. 下载脚本 如果你在这份文档仓库里，可以直接进入脚本目录："><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"编程技术","item":"https://doc.jihw.top/coding/"},{"@type":"ListItem","position":2,"name":"K8s入门教程","item":"https://doc.jihw.top/coding/k8s-getting-started/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"K8s入门教程","name":"K8s入门教程","description":"三主节点高可用 3 台机器全部做 control-plane 3 个 etcd 组成 stacked etcd HAProxy + Keepalived 提供 API Server 虚拟 IP containerd 作为容器运行时 规划：\n192.168.3.214 k8s-master1 192.168.3.215 k8s-master2 192.168.3.216 k8s-master3 192.168.3.217 k8s-vip API 入口用：\n192.168.3.217:8443 不用 6443 是因为 HAProxy 和 kube-apiserver 都在同一批机器上，避免端口冲突。\n快捷部署（脚本版） 如果你想先快速把三主节点 HA 集群跑起来，可以直接用我整理好的脚本。脚本放在仓库的 static/k8s 目录，站点发布后访问路径是 /k8s/脚本名。\n脚本默认使用这组地址：\n192.168.3.214 k8s-master1 192.168.3.215 k8s-master2 192.168.3.216 k8s-master3 192.168.3.217 k8s-vip Kubernetes: v1.36 API 入口: 192.168.3.217:8443 如果 IP、VIP、Kubernetes 版本不一样，先改 k8s_env.sh，或者执行脚本时通过环境变量覆盖：\nMASTER1_IP=192.168.3.214 \\ MASTER2_IP=192.168.3.215 \\ MASTER3_IP=192.168.3.216 \\ VIP_IP=192.168.3.217 \\ K8S_VERSION=v1.36 \\ bash k8s_prepare.sh 1. 下载脚本 如果你在这份文档仓库里，可以直接进入脚本目录：\n","keywords":[],"articleBody":"三主节点高可用 3 台机器全部做 control-plane 3 个 etcd 组成 stacked etcd HAProxy + Keepalived 提供 API Server 虚拟 IP containerd 作为容器运行时 规划：\n192.168.3.214 k8s-master1 192.168.3.215 k8s-master2 192.168.3.216 k8s-master3 192.168.3.217 k8s-vip API 入口用：\n192.168.3.217:8443 不用 6443 是因为 HAProxy 和 kube-apiserver 都在同一批机器上，避免端口冲突。\n快捷部署（脚本版） 如果你想先快速把三主节点 HA 集群跑起来，可以直接用我整理好的脚本。脚本放在仓库的 static/k8s 目录，站点发布后访问路径是 /k8s/脚本名。\n脚本默认使用这组地址：\n192.168.3.214 k8s-master1 192.168.3.215 k8s-master2 192.168.3.216 k8s-master3 192.168.3.217 k8s-vip Kubernetes: v1.36 API 入口: 192.168.3.217:8443 如果 IP、VIP、Kubernetes 版本不一样，先改 k8s_env.sh，或者执行脚本时通过环境变量覆盖：\nMASTER1_IP=192.168.3.214 \\ MASTER2_IP=192.168.3.215 \\ MASTER3_IP=192.168.3.216 \\ VIP_IP=192.168.3.217 \\ K8S_VERSION=v1.36 \\ bash k8s_prepare.sh 1. 下载脚本 如果你在这份文档仓库里，可以直接进入脚本目录：\ncd static/k8s chmod +x *.sh 如果是在三台 Ubuntu 机器上从网站下载：\nmkdir -p ~/k8s-ha cd ~/k8s-ha for file in \\ k8s_env.sh \\ k8s_reset.sh \\ k8s_prepare.sh \\ k8s_init_master1.sh \\ k8s_join_control_plane.sh \\ k8s_post_install.sh \\ k8s_check_ha.sh \\ k8s_shutdown_all.sh do curl -fsSLO \"https://doc.jihw.top/k8s/${file}\" done chmod +x *.sh 2. 可选：清理旧集群 如果这三台机器之前已经跑过 kubeadm 集群，三台都执行：\nYES=yes bash k8s_reset.sh 这一步会删除本机的 Kubernetes、etcd、kubelet、CNI 和 ~/.kube 配置。新机器可以跳过。\n3. 三台机器都执行准备脚本 在 192.168.3.214、192.168.3.215、192.168.3.216 三台都执行：\nbash k8s_prepare.sh 这个脚本会自动做这些事：\n安装基础工具、containerd、kubeadm、kubelet、kubectl 关闭 swap 配置内核模块和 sysctl 写入 hosts 按本机 IP 设置 hostname 配置 HAProxy 配置 Keepalived 如果脚本没有识别出本机 IP，手动指定：\nNODE_IP=192.168.3.214 bash k8s_prepare.sh 如果默认网卡不是脚本自动识别的网卡，也可以指定：\nIFACE=ens33 bash k8s_prepare.sh 4. 初始化第一个 control-plane 只在 192.168.3.214 上执行：\nbash k8s_init_master1.sh 它会执行 kubeadm init，配置当前用户的 kubectl，安装 Flannel，并生成：\n~/k8s-control-plane-join.sh 这个 join 脚本用于把另外两台机器加入 control-plane。\n5. 加入另外两个 control-plane 把 192.168.3.214 上生成的 ~/k8s-control-plane-join.sh 拷到 192.168.3.215 和 192.168.3.216，然后分别执行：\nbash ~/k8s-control-plane-join.sh 如果不想拷贝脚本，也可以在另外两台机器上用 JOIN_COMMAND 传入完整 join 命令：\nJOIN_COMMAND='sudo kubeadm join 192.168.3.217:8443 --token xxxxxx.xxxxxxxxxxxxxxxx --discovery-token-ca-cert-hash sha256:xxxx --control-plane --certificate-key xxxx' \\ bash k8s_join_control_plane.sh 6. 部署测试应用并检查 HA 在任意一台 master 上执行：\nbash k8s_post_install.sh bash k8s_check_ha.sh k8s_post_install.sh 会允许 control-plane 跑业务 Pod，并部署一个 nginx NodePort 服务。\nk8s_check_ha.sh 会检查节点、系统 Pod、etcd、VIP 和 API Server 健康状态。\n确认没问题后，可以手工关掉当前持有 VIP 的机器，再在其他 master 上执行：\nkubectl get nodes ip addr | grep 192.168.3.217 如果 kubectl get nodes 仍然能返回，并且 VIP 漂移到其他机器，说明 API Server HA 生效。\n一、先理解 HA 架构 高可用 K8s 至少要解决三件事：\n1. 多个 kube-apiserver 2. 多个 etcd，且保持多数派 3. 一个稳定的 API 入口 你这 3 台机器会变成：\nk8s-master1: apiserver + scheduler + controller-manager + etcd + haproxy + keepalived k8s-master2: apiserver + scheduler + controller-manager + etcd + haproxy + keepalived k8s-master3: apiserver + scheduler + controller-manager + etcd + haproxy + keepalived 3 个 etcd 可以容忍 宕机 1 台。\n如果 3 台里宕 2 台，etcd 没有多数派，集群就不可用了。\n如果这 3 台虚拟机都在同一台物理机上，那只是“学习 HA”，不是物理层真正 HA。\n二、如果昨天已经初始化过集群，先清理 三台都执行。注意：这会清掉现有 K8s 集群配置。\nsudo kubeadm reset -f sudo rm -rf /etc/kubernetes sudo rm -rf /var/lib/etcd sudo rm -rf /var/lib/kubelet sudo rm -rf /etc/cni/net.d sudo rm -rf /var/lib/cni sudo rm -rf ~/.kube sudo systemctl restart containerd sudo systemctl restart kubelet || true 三、三台机器都执行基础配置 sudo apt update sudo apt install -y apt-transport-https ca-certificates curl gpg vim haproxy keepalived 关闭 swap：\nsudo swapoff -a sudo sed -i.bak '/ swap / s/^/#/' /etc/fstab 配置内核模块：\ncat \u003c","wordCount":"2333","inLanguage":"zh","datePublished":"2026-05-28T17:52:06+08:00","dateModified":"2026-05-28T17:52:06+08:00","author":{"@type":"Person","name":"老约翰"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://doc.jihw.top/coding/k8s-getting-started/"},"publisher":{"@type":"Organization","name":"老约翰的生活","logo":{"@type":"ImageObject","url":"https://doc.jihw.top/images/site-logo.png"}}}</script></head><body id=top><header class=header><nav class=header-nav><div class=logo><a href=/ accesskey=h title="老约翰的生活 (Alt + H)"><img src=/images/site-logo.png alt aria-label=logo height=36>老约翰的生活</a><div class=logo-switches><button id=theme-toggle class=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg class="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg class="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></div><ul id=menu class=menu><li><a href=/search/ title="搜索 (Alt + /)" accesskey=/><span>搜索</span></a></li><li><a href=/ai/ title=人工智能><span>人工智能</span></a></li><li><a href=/coding/ title=编程技术><span>编程技术</span></a></li><li><a href=/learning/ title=广泛学习><span>广泛学习</span></a></li></ul></nav></header><main class=main><article class=post-single><header class=post-header><nav class=breadcrumbs role=navigation aria-label=Breadcrumb><a href=/>主页</a>
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevron-right"><polyline points="9 18 15 12 9 6"/></svg>
+<a href=/coding/>编程技术</a></nav><h1 class="post-title entry-hint-parent">K8s入门教程</h1><div class=post-meta><span title='2026-05-28 17:52:06 +0800 +0800'>发布时间：2026年5月28日</span>&nbsp;·&nbsp;<span>预计阅读：11 分钟</span>&nbsp;·&nbsp;<span>老约翰</span></div></header><details class=toc open><summary accesskey=c title="(Alt + C)"><span class=title>目录</span></summary><div class=inner><ul><li><a href=#%e4%b8%89%e4%b8%bb%e8%8a%82%e7%82%b9%e9%ab%98%e5%8f%af%e7%94%a8 aria-label=三主节点高可用>三主节点高可用</a></li><li><a href=#%e5%bf%ab%e6%8d%b7%e9%83%a8%e7%bd%b2%e8%84%9a%e6%9c%ac%e7%89%88 aria-label=快捷部署（脚本版）>快捷部署（脚本版）</a><ul><li><a href=#1-%e4%b8%8b%e8%bd%bd%e8%84%9a%e6%9c%ac aria-label="1. 下载脚本">1. 下载脚本</a></li><li><a href=#2-%e5%8f%af%e9%80%89%e6%b8%85%e7%90%86%e6%97%a7%e9%9b%86%e7%be%a4 aria-label="2. 可选：清理旧集群">2. 可选：清理旧集群</a></li><li><a href=#3-%e4%b8%89%e5%8f%b0%e6%9c%ba%e5%99%a8%e9%83%bd%e6%89%a7%e8%a1%8c%e5%87%86%e5%a4%87%e8%84%9a%e6%9c%ac aria-label="3. 三台机器都执行准备脚本">3. 三台机器都执行准备脚本</a></li><li><a href=#4-%e5%88%9d%e5%a7%8b%e5%8c%96%e7%ac%ac%e4%b8%80%e4%b8%aa-control-plane aria-label="4. 初始化第一个 control-plane">4. 初始化第一个 control-plane</a></li><li><a href=#5-%e5%8a%a0%e5%85%a5%e5%8f%a6%e5%a4%96%e4%b8%a4%e4%b8%aa-control-plane aria-label="5. 加入另外两个 control-plane">5. 加入另外两个 control-plane</a></li><li><a href=#6-%e9%83%a8%e7%bd%b2%e6%b5%8b%e8%af%95%e5%ba%94%e7%94%a8%e5%b9%b6%e6%a3%80%e6%9f%a5-ha aria-label="6. 部署测试应用并检查 HA">6. 部署测试应用并检查 HA</a></li></ul></li><li><a href=#%e4%b8%80%e5%85%88%e7%90%86%e8%a7%a3-ha-%e6%9e%b6%e6%9e%84 aria-label="一、先理解 HA 架构">一、先理解 HA 架构</a></li><li><a href=#%e4%ba%8c%e5%a6%82%e6%9e%9c%e6%98%a8%e5%a4%a9%e5%b7%b2%e7%bb%8f%e5%88%9d%e5%a7%8b%e5%8c%96%e8%bf%87%e9%9b%86%e7%be%a4%e5%85%88%e6%b8%85%e7%90%86 aria-label=二、如果昨天已经初始化过集群，先清理>二、如果昨天已经初始化过集群，先清理</a></li><li><a href=#%e4%b8%89%e4%b8%89%e5%8f%b0%e6%9c%ba%e5%99%a8%e9%83%bd%e6%89%a7%e8%a1%8c%e5%9f%ba%e7%a1%80%e9%85%8d%e7%bd%ae aria-label=三、三台机器都执行基础配置>三、三台机器都执行基础配置</a></li><li><a href=#%e5%9b%9b%e4%b8%89%e5%8f%b0%e6%9c%ba%e5%99%a8%e5%ae%89%e8%a3%85-containerd aria-label="四、三台机器安装 containerd">四、三台机器安装 containerd</a></li><li><a href=#%e4%ba%94%e4%b8%89%e5%8f%b0%e6%9c%ba%e5%99%a8%e5%ae%89%e8%a3%85-kubeadmkubeletkubectl aria-label="五、三台机器安装 kubeadm/kubelet/kubectl">五、三台机器安装 kubeadm/kubelet/kubectl</a><ul><li><a href=#%e9%85%8d%e7%bd%ae%e9%95%9c%e5%83%8f%e5%8a%a0%e9%80%9f aria-label=配置镜像加速>配置镜像加速</a></li></ul></li><li><a href=#%e5%85%ad%e4%b8%89%e5%8f%b0%e6%9c%ba%e5%99%a8%e9%85%8d%e7%bd%ae-haproxy aria-label="六、三台机器配置 HAProxy">六、三台机器配置 HAProxy</a></li><li><a href=#%e4%b8%83%e4%b8%89%e5%8f%b0%e6%9c%ba%e5%99%a8%e9%85%8d%e7%bd%ae-keepalived aria-label="七、三台机器配置 Keepalived">七、三台机器配置 Keepalived</a><ul><li><a href=#1921683214-%e4%b8%8a%e6%89%a7%e8%a1%8c aria-label="192.168.3.214 上执行">192.168.3.214 上执行</a></li><li><a href=#1921683215-%e4%b8%8a%e6%89%a7%e8%a1%8c aria-label="192.168.3.215 上执行">192.168.3.215 上执行</a></li><li><a href=#1921683216-%e4%b8%8a%e6%89%a7%e8%a1%8c aria-label="192.168.3.216 上执行">192.168.3.216 上执行</a></li></ul></li><li><a href=#%e5%85%ab%e5%88%9d%e5%a7%8b%e5%8c%96%e7%ac%ac%e4%b8%80%e4%b8%aa-control-plane aria-label="八、初始化第一个 control-plane">八、初始化第一个 control-plane</a></li><li><a href=#%e4%b9%9d%e5%8a%a0%e5%85%a5%e5%8f%a6%e5%a4%96%e4%b8%a4%e4%b8%aa-control-plane aria-label="九、加入另外两个 control-plane">九、加入另外两个 control-plane</a></li><li><a href=#%e5%8d%81%e6%a3%80%e6%9f%a5%e9%9b%86%e7%be%a4 aria-label=十、检查集群>十、检查集群</a></li><li><a href=#%e5%8d%81%e4%b8%80%e5%85%81%e8%ae%b8-control-plane-%e4%b9%9f%e8%b7%91%e4%b8%9a%e5%8a%a1-pod aria-label="十一、允许 control-plane 也跑业务 Pod">十一、允许 control-plane 也跑业务 Pod</a></li><li><a href=#%e5%8d%81%e4%ba%8c%e6%b5%8b%e8%af%95%e9%83%a8%e7%bd%b2-nginx aria-label="十二、测试部署 nginx">十二、测试部署 nginx</a></li><li><a href=#%e5%8d%81%e4%b8%89%e6%b5%8b%e8%af%95%e9%ab%98%e5%8f%af%e7%94%a8 aria-label=十三、测试高可用>十三、测试高可用</a></li><li><a href=#%e5%8d%81%e5%9b%9b%e8%99%9a%e6%8b%9f%e6%9c%ba%e9%9b%86%e7%be%a4%e7%9a%84%e6%97%a5%e5%b8%b8%e5%85%b3%e6%9c%ba%e5%92%8c%e5%90%af%e5%8a%a8 aria-label=十四、虚拟机集群的日常关机和启动>十四、虚拟机集群的日常关机和启动</a><ul><li><a href=#1-%e5%85%b3%e6%9c%ba%e5%89%8d%e6%a3%80%e6%9f%a5%e9%9b%86%e7%be%a4%e7%8a%b6%e6%80%81 aria-label="1. 关机前检查集群状态">1. 关机前检查集群状态</a></li><li><a href=#2-%e4%b8%8d%e5%bb%ba%e8%ae%ae%e5%af%b9%e6%95%b4%e5%a5%97%e9%9b%86%e7%be%a4%e9%80%90%e5%8f%b0-drain aria-label="2. 不建议对整套集群逐台 drain">2. 不建议对整套集群逐台 drain</a></li><li><a href=#3-%e5%85%b3%e9%97%ad-worker-%e8%8a%82%e7%82%b9 aria-label="3. 关闭 worker 节点">3. 关闭 worker 节点</a></li><li><a href=#4-%e4%bd%bf%e7%94%a8%e4%b8%80%e9%94%ae%e5%85%b3%e9%97%ad%e8%84%9a%e6%9c%ac aria-label="4. 使用一键关闭脚本">4. 使用一键关闭脚本</a></li><li><a href=#5-%e6%89%8b%e5%8a%a8%e5%85%b3%e9%97%ad-master-%e8%8a%82%e7%82%b9 aria-label="5. 手动关闭 master 节点">5. 手动关闭 master 节点</a></li><li><a href=#6-%e7%ac%ac%e4%ba%8c%e5%a4%a9%e5%90%af%e5%8a%a8-master aria-label="6. 第二天启动 master">6. 第二天启动 master</a></li><li><a href=#7-%e5%90%af%e5%8a%a8-worker aria-label="7. 启动 worker">7. 启动 worker</a></li><li><a href=#8-%e5%90%af%e5%8a%a8%e5%90%8e%e6%a3%80%e6%9f%a5%e4%b8%9a%e5%8a%a1 aria-label="8. 启动后检查业务">8. 启动后检查业务</a></li><li><a href=#9-%e5%b8%b8%e8%a7%81%e9%97%ae%e9%a2%98 aria-label="9. 常见问题">9. 常见问题</a></li></ul></li><li><a href=#%e5%8d%81%e4%ba%94metallbingress aria-label=十五、MetalLB、Ingress>十五、MetalLB、Ingress</a></li></ul></div></details><div class="post-content md-content"><h2 id=三主节点高可用>三主节点高可用<a hidden class=anchor aria-hidden=true href=#三主节点高可用>#</a></h2><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>3 台机器全部做 control-plane
+</span></span><span style=display:flex><span>3 个 etcd 组成 stacked etcd
+</span></span><span style=display:flex><span>HAProxy + Keepalived 提供 API Server 虚拟 IP
+</span></span><span style=display:flex><span>containerd 作为容器运行时
+</span></span></code></pre></div><p>规划：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.214  k8s-master1
+</span></span><span style=display:flex><span>192.168.3.215  k8s-master2
+</span></span><span style=display:flex><span>192.168.3.216  k8s-master3
+</span></span><span style=display:flex><span>192.168.3.217  k8s-vip
+</span></span></code></pre></div><p>API 入口用：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.217:8443
+</span></span></code></pre></div><p>不用 <code>6443</code> 是因为 HAProxy 和 kube-apiserver 都在同一批机器上，避免端口冲突。</p><hr><h2 id=快捷部署脚本版>快捷部署（脚本版）<a hidden class=anchor aria-hidden=true href=#快捷部署脚本版>#</a></h2><p>如果你想先快速把三主节点 HA 集群跑起来，可以直接用我整理好的脚本。脚本放在仓库的 <code>static/k8s</code> 目录，站点发布后访问路径是 <code>/k8s/脚本名</code>。</p><p>脚本默认使用这组地址：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.214  k8s-master1
+</span></span><span style=display:flex><span>192.168.3.215  k8s-master2
+</span></span><span style=display:flex><span>192.168.3.216  k8s-master3
+</span></span><span style=display:flex><span>192.168.3.217  k8s-vip
+</span></span><span style=display:flex><span>Kubernetes: v1.36
+</span></span><span style=display:flex><span>API 入口: 192.168.3.217:8443
+</span></span></code></pre></div><p>如果 IP、VIP、Kubernetes 版本不一样，先改 <code>k8s_env.sh</code>，或者执行脚本时通过环境变量覆盖：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>MASTER1_IP<span style=color:#f92672>=</span>192.168.3.214 <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>MASTER2_IP<span style=color:#f92672>=</span>192.168.3.215 <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>MASTER3_IP<span style=color:#f92672>=</span>192.168.3.216 <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>VIP_IP<span style=color:#f92672>=</span>192.168.3.217 <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>K8S_VERSION<span style=color:#f92672>=</span>v1.36 <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>bash k8s_prepare.sh
+</span></span></code></pre></div><h3 id=1-下载脚本>1. 下载脚本<a hidden class=anchor aria-hidden=true href=#1-下载脚本>#</a></h3><p>如果你在这份文档仓库里，可以直接进入脚本目录：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cd static/k8s
+</span></span><span style=display:flex><span>chmod +x *.sh
+</span></span></code></pre></div><p>如果是在三台 Ubuntu 机器上从网站下载：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>mkdir -p ~/k8s-ha
+</span></span><span style=display:flex><span>cd ~/k8s-ha
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>for</span> file in <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  k8s_env.sh <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  k8s_reset.sh <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  k8s_prepare.sh <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  k8s_init_master1.sh <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  k8s_join_control_plane.sh <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  k8s_post_install.sh <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  k8s_check_ha.sh <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  k8s_shutdown_all.sh
+</span></span><span style=display:flex><span><span style=color:#66d9ef>do</span>
+</span></span><span style=display:flex><span>  curl -fsSLO <span style=color:#e6db74>&#34;https://doc.jihw.top/k8s/</span><span style=color:#e6db74>${</span>file<span style=color:#e6db74>}</span><span style=color:#e6db74>&#34;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>done</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>chmod +x *.sh
+</span></span></code></pre></div><h3 id=2-可选清理旧集群>2. 可选：清理旧集群<a hidden class=anchor aria-hidden=true href=#2-可选清理旧集群>#</a></h3><p>如果这三台机器之前已经跑过 kubeadm 集群，三台都执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>YES<span style=color:#f92672>=</span>yes bash k8s_reset.sh
+</span></span></code></pre></div><p>这一步会删除本机的 Kubernetes、etcd、kubelet、CNI 和 <code>~/.kube</code> 配置。新机器可以跳过。</p><h3 id=3-三台机器都执行准备脚本>3. 三台机器都执行准备脚本<a hidden class=anchor aria-hidden=true href=#3-三台机器都执行准备脚本>#</a></h3><p>在 <code>192.168.3.214</code>、<code>192.168.3.215</code>、<code>192.168.3.216</code> 三台都执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>bash k8s_prepare.sh
+</span></span></code></pre></div><p>这个脚本会自动做这些事：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>安装基础工具、containerd、kubeadm、kubelet、kubectl
+</span></span><span style=display:flex><span>关闭 swap
+</span></span><span style=display:flex><span>配置内核模块和 sysctl
+</span></span><span style=display:flex><span>写入 hosts
+</span></span><span style=display:flex><span>按本机 IP 设置 hostname
+</span></span><span style=display:flex><span>配置 HAProxy
+</span></span><span style=display:flex><span>配置 Keepalived
+</span></span></code></pre></div><p>如果脚本没有识别出本机 IP，手动指定：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>NODE_IP<span style=color:#f92672>=</span>192.168.3.214 bash k8s_prepare.sh
+</span></span></code></pre></div><p>如果默认网卡不是脚本自动识别的网卡，也可以指定：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>IFACE<span style=color:#f92672>=</span>ens33 bash k8s_prepare.sh
+</span></span></code></pre></div><h3 id=4-初始化第一个-control-plane>4. 初始化第一个 control-plane<a hidden class=anchor aria-hidden=true href=#4-初始化第一个-control-plane>#</a></h3><p>只在 <code>192.168.3.214</code> 上执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>bash k8s_init_master1.sh
+</span></span></code></pre></div><p>它会执行 <code>kubeadm init</code>，配置当前用户的 <code>kubectl</code>，安装 Flannel，并生成：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>~/k8s-control-plane-join.sh
+</span></span></code></pre></div><p>这个 join 脚本用于把另外两台机器加入 control-plane。</p><h3 id=5-加入另外两个-control-plane>5. 加入另外两个 control-plane<a hidden class=anchor aria-hidden=true href=#5-加入另外两个-control-plane>#</a></h3><p>把 <code>192.168.3.214</code> 上生成的 <code>~/k8s-control-plane-join.sh</code> 拷到 <code>192.168.3.215</code> 和 <code>192.168.3.216</code>，然后分别执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>bash ~/k8s-control-plane-join.sh
+</span></span></code></pre></div><p>如果不想拷贝脚本，也可以在另外两台机器上用 <code>JOIN_COMMAND</code> 传入完整 join 命令：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>JOIN_COMMAND<span style=color:#f92672>=</span><span style=color:#e6db74>&#39;sudo kubeadm join 192.168.3.217:8443 --token xxxxxx.xxxxxxxxxxxxxxxx --discovery-token-ca-cert-hash sha256:xxxx --control-plane --certificate-key xxxx&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>bash k8s_join_control_plane.sh
+</span></span></code></pre></div><h3 id=6-部署测试应用并检查-ha>6. 部署测试应用并检查 HA<a hidden class=anchor aria-hidden=true href=#6-部署测试应用并检查-ha>#</a></h3><p>在任意一台 master 上执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>bash k8s_post_install.sh
+</span></span><span style=display:flex><span>bash k8s_check_ha.sh
+</span></span></code></pre></div><p><code>k8s_post_install.sh</code> 会允许 control-plane 跑业务 Pod，并部署一个 nginx NodePort 服务。<br><code>k8s_check_ha.sh</code> 会检查节点、系统 Pod、etcd、VIP 和 API Server 健康状态。</p><p>确认没问题后，可以手工关掉当前持有 VIP 的机器，再在其他 master 上执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get nodes
+</span></span><span style=display:flex><span>ip addr | grep 192.168.3.217
+</span></span></code></pre></div><p>如果 <code>kubectl get nodes</code> 仍然能返回，并且 VIP 漂移到其他机器，说明 API Server HA 生效。</p><hr><h2 id=一先理解-ha-架构>一、先理解 HA 架构<a hidden class=anchor aria-hidden=true href=#一先理解-ha-架构>#</a></h2><p>高可用 K8s 至少要解决三件事：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>1. 多个 kube-apiserver
+</span></span><span style=display:flex><span>2. 多个 etcd，且保持多数派
+</span></span><span style=display:flex><span>3. 一个稳定的 API 入口
+</span></span></code></pre></div><p>你这 3 台机器会变成：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>k8s-master1: apiserver + scheduler + controller-manager + etcd + haproxy + keepalived
+</span></span><span style=display:flex><span>k8s-master2: apiserver + scheduler + controller-manager + etcd + haproxy + keepalived
+</span></span><span style=display:flex><span>k8s-master3: apiserver + scheduler + controller-manager + etcd + haproxy + keepalived
+</span></span></code></pre></div><p>3 个 etcd 可以容忍 <strong>宕机 1 台</strong>。<br>如果 3 台里宕 2 台，etcd 没有多数派，集群就不可用了。</p><p>如果这 3 台虚拟机都在同一台物理机上，那只是“学习 HA”，不是物理层真正 HA。</p><hr><h2 id=二如果昨天已经初始化过集群先清理>二、如果昨天已经初始化过集群，先清理<a hidden class=anchor aria-hidden=true href=#二如果昨天已经初始化过集群先清理>#</a></h2><p>三台都执行。注意：这会清掉现有 K8s 集群配置。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo kubeadm reset -f
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo rm -rf /etc/kubernetes
+</span></span><span style=display:flex><span>sudo rm -rf /var/lib/etcd
+</span></span><span style=display:flex><span>sudo rm -rf /var/lib/kubelet
+</span></span><span style=display:flex><span>sudo rm -rf /etc/cni/net.d
+</span></span><span style=display:flex><span>sudo rm -rf /var/lib/cni
+</span></span><span style=display:flex><span>sudo rm -rf ~/.kube
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo systemctl restart containerd
+</span></span><span style=display:flex><span>sudo systemctl restart kubelet <span style=color:#f92672>||</span> true
+</span></span></code></pre></div><hr><h2 id=三三台机器都执行基础配置>三、三台机器都执行基础配置<a hidden class=anchor aria-hidden=true href=#三三台机器都执行基础配置>#</a></h2><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo apt update
+</span></span><span style=display:flex><span>sudo apt install -y apt-transport-https ca-certificates curl gpg vim haproxy keepalived
+</span></span></code></pre></div><p>关闭 swap：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo swapoff -a
+</span></span><span style=display:flex><span>sudo sed -i.bak <span style=color:#e6db74>&#39;/ swap / s/^/#/&#39;</span> /etc/fstab
+</span></span></code></pre></div><p>配置内核模块：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;EOF | sudo tee /etc/modules-load.d/k8s.conf
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>overlay
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>br_netfilter
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo modprobe overlay
+</span></span><span style=display:flex><span>sudo modprobe br_netfilter
+</span></span></code></pre></div><p>配置内核参数：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;EOF | sudo tee /etc/sysctl.d/k8s.conf
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>net.bridge.bridge-nf-call-iptables = 1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>net.bridge.bridge-nf-call-ip6tables = 1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>net.ipv4.ip_forward = 1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>net.ipv4.ip_nonlocal_bind = 1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo sysctl --system
+</span></span></code></pre></div><p>配置 hosts：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;EOF | sudo tee -a /etc/hosts
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>192.168.3.214 k8s-master1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>192.168.3.215 k8s-master2
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>192.168.3.216 k8s-master3
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>192.168.3.217 k8s-vip
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p>分别设置 hostname：</p><p>在 <code>192.168.3.214</code>：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo hostnamectl set-hostname k8s-master1
+</span></span></code></pre></div><p>在 <code>192.168.3.215</code>：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo hostnamectl set-hostname k8s-master2
+</span></span></code></pre></div><p>在 <code>192.168.3.216</code>：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo hostnamectl set-hostname k8s-master3
+</span></span></code></pre></div><hr><h2 id=四三台机器安装-containerd>四、三台机器安装 containerd<a hidden class=anchor aria-hidden=true href=#四三台机器安装-containerd>#</a></h2><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo apt install -y containerd
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo mkdir -p /etc/containerd
+</span></span><span style=display:flex><span>containerd config default | sudo tee /etc/containerd/config.toml &gt;/dev/null
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo sed -i <span style=color:#e6db74>&#39;s/SystemdCgroup = false/SystemdCgroup = true/&#39;</span> /etc/containerd/config.toml
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo systemctl restart containerd
+</span></span><span style=display:flex><span>sudo systemctl enable containerd
+</span></span></code></pre></div><h2 id=五三台机器安装-kubeadmkubeletkubectl>五、三台机器安装 kubeadm/kubelet/kubectl<a hidden class=anchor aria-hidden=true href=#五三台机器安装-kubeadmkubeletkubectl>#</a></h2><p>这里用 Kubernetes <code>v1.36</code>。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo mkdir -p -m <span style=color:#ae81ff>755</span> /etc/apt/keyrings
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.36/deb/Release.key <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>echo <span style=color:#e6db74>&#39;deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.36/deb/ /&#39;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  | sudo tee /etc/apt/sources.list.d/kubernetes.list
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo apt update
+</span></span><span style=display:flex><span>sudo apt install -y kubelet kubeadm kubectl 
+</span></span><span style=display:flex><span>sudo apt-mark hold kubelet kubeadm kubectl
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo systemctl enable --now kubelet
+</span></span></code></pre></div><h3 id=配置镜像加速>配置镜像加速<a hidden class=anchor aria-hidden=true href=#配置镜像加速>#</a></h3><p>在 K8s + containerd 里，<strong>不要改 Docker 的 <code>/etc/docker/daemon.json</code></strong>，因为节点上不是 Docker 在拉镜像，而是 <strong>containerd</strong> 在拉。</p><p>你有两种方式。</p><p><strong>方式一：推荐，给 containerd 配 Docker Hub 镜像加速</strong></p><p>这要在 <strong>每个 K8s 节点</strong> 都执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span><span style=color:#75715e># 创建 containerd 的 registry 配置目录</span>
+</span></span><span style=display:flex><span>sudo mkdir -p /etc/containerd/certs.d/docker.io
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># 写入 Docker Hub 镜像加速配置</span>
+</span></span><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;EOF | sudo tee /etc/containerd/certs.d/docker.io/hosts.toml
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>server = &#34;https://registry-1.docker.io&#34;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>[host.&#34;https://docker.m.daocloud.io&#34;]
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  capabilities = [&#34;pull&#34;, &#34;resolve&#34;]
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p>然后确认 containerd 启用了 <code>config_path</code>：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span><span style=color:#75715e># 目前测试不能识别多目录，将默认的docker目录去除才有用</span>
+</span></span><span style=display:flex><span>sudo sed -i <span style=color:#e6db74>&#34;s|config_path = &#39;/etc/containerd/certs.d:/etc/docker/certs.d&#39;|config_path = &#39;/etc/containerd/certs.d&#39;|&#34;</span> /etc/containerd/config.toml
+</span></span><span style=display:flex><span>sudo grep -n <span style=color:#e6db74>&#34;config_path&#34;</span> /etc/containerd/config.toml
+</span></span><span style=display:flex><span>sudo systemctl restart containerd
+</span></span><span style=display:flex><span>sudo systemctl restart kubelet
+</span></span></code></pre></div><p>如果没有 <code>crictl</code>，可以先装：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo apt install -y cri-tools
+</span></span></code></pre></div><p>消除警告</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;EOF | sudo tee /etc/crictl.yaml
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>runtime-endpoint: unix:///run/containerd/containerd.sock
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>image-endpoint: unix:///run/containerd/containerd.sock
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>timeout: 10
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>debug: false
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p>测试拉取：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo crictl -D pull nginx:latest
+</span></span><span style=display:flex><span>crictl images
+</span></span><span style=display:flex><span><span style=color:#75715e>#查看镜像日志</span>
+</span></span><span style=display:flex><span>sudo journalctl -u containerd -f
+</span></span></code></pre></div><hr><h2 id=六三台机器配置-haproxy>六、三台机器配置 HAProxy<a hidden class=anchor aria-hidden=true href=#六三台机器配置-haproxy>#</a></h2><p>三台都写同样配置：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;EOF | sudo tee /etc/haproxy/haproxy.cfg
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>global
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    log /dev/log local0
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    log /dev/log local1 notice
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    daemon
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    maxconn 4096
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>defaults
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    log global
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    mode tcp
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    option tcplog
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    option dontlognull
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    timeout connect 5s
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    timeout client  50s
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    timeout server  50s
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>frontend kubernetes-apiserver
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    bind *:8443
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    mode tcp
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    default_backend kubernetes-apiserver
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>backend kubernetes-apiserver
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    mode tcp
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    balance roundrobin
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    option tcp-check
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    server k8s-master1 192.168.3.214:6443 check
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    server k8s-master2 192.168.3.215:6443 check
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    server k8s-master3 192.168.3.216:6443 check
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo systemctl restart haproxy
+</span></span><span style=display:flex><span>sudo systemctl enable haproxy
+</span></span></code></pre></div><hr><h2 id=七三台机器配置-keepalived>七、三台机器配置 Keepalived<a hidden class=anchor aria-hidden=true href=#七三台机器配置-keepalived>#</a></h2><p>先确认网卡名：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>ip -o -4 route show to default | awk <span style=color:#e6db74>&#39;{print $5}&#39;</span>
+</span></span></code></pre></div><p>假设输出是：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>ens33
+</span></span></code></pre></div><p>如果你的不是 <code>ens33</code>，下面配置里的 <code>ens33</code> 要替换。</p><h3 id=1921683214-上执行>192.168.3.214 上执行<a hidden class=anchor aria-hidden=true href=#1921683214-上执行>#</a></h3><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;EOF | sudo tee /etc/keepalived/keepalived.conf
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>vrrp_script chk_haproxy {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    script &#34;killall -0 haproxy&#34;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    interval 2
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    weight -20
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>}
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>vrrp_instance VI_1 {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    state MASTER
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    interface ens33
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    virtual_router_id 51
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    priority 101
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    advert_int 1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    authentication {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        auth_type PASS
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        auth_pass k8sha
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    unicast_src_ip 192.168.3.214
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    unicast_peer {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        192.168.3.215
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        192.168.3.216
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    virtual_ipaddress {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        192.168.3.217/24
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    track_script {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        chk_haproxy
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>}
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo systemctl restart keepalived
+</span></span><span style=display:flex><span>sudo systemctl enable keepalived
+</span></span></code></pre></div><h3 id=1921683215-上执行>192.168.3.215 上执行<a hidden class=anchor aria-hidden=true href=#1921683215-上执行>#</a></h3><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;EOF | sudo tee /etc/keepalived/keepalived.conf
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>vrrp_script chk_haproxy {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    script &#34;killall -0 haproxy&#34;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    interval 2
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    weight -20
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>}
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>vrrp_instance VI_1 {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    state BACKUP
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    interface ens33
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    virtual_router_id 51
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    priority 100
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    advert_int 1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    authentication {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        auth_type PASS
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        auth_pass k8sha
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    unicast_src_ip 192.168.3.215
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    unicast_peer {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        192.168.3.214
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        192.168.3.216
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    virtual_ipaddress {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        192.168.3.217/24
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    track_script {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        chk_haproxy
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>}
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo systemctl restart keepalived
+</span></span><span style=display:flex><span>sudo systemctl enable keepalived
+</span></span></code></pre></div><h3 id=1921683216-上执行>192.168.3.216 上执行<a hidden class=anchor aria-hidden=true href=#1921683216-上执行>#</a></h3><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;EOF | sudo tee /etc/keepalived/keepalived.conf
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>vrrp_script chk_haproxy {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    script &#34;killall -0 haproxy&#34;
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    interval 2
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    weight -20
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>}
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>vrrp_instance VI_1 {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    state BACKUP
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    interface ens33
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    virtual_router_id 51
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    priority 99
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    advert_int 1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    authentication {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        auth_type PASS
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        auth_pass k8sha
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    unicast_src_ip 192.168.3.216
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    unicast_peer {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        192.168.3.214
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        192.168.3.215
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    virtual_ipaddress {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        192.168.3.217/24
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    track_script {
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        chk_haproxy
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    }
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>}
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sudo systemctl restart keepalived
+</span></span><span style=display:flex><span>sudo systemctl enable keepalived
+</span></span></code></pre></div><p>检查 VIP 是否出现：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>ip addr | grep 192.168.3.217
+</span></span></code></pre></div><p>只要三台里有一台显示 <code>192.168.3.217</code>，就说明 VIP 正常。</p><hr><h2 id=八初始化第一个-control-plane>八、初始化第一个 control-plane<a hidden class=anchor aria-hidden=true href=#八初始化第一个-control-plane>#</a></h2><p>只在 <code>192.168.3.214</code> 执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo kubeadm init <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --control-plane-endpoint <span style=color:#e6db74>&#34;192.168.3.217:8443&#34;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --upload-certs <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --apiserver-advertise-address<span style=color:#f92672>=</span>192.168.3.214 <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --pod-network-cidr<span style=color:#f92672>=</span>10.244.0.0/16 <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --cri-socket<span style=color:#f92672>=</span>unix:///run/containerd/containerd.sock
+</span></span></code></pre></div><p>初始化成功后，保存输出里的两类 join 命令：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>worker join 命令
+</span></span><span style=display:flex><span>control-plane join 命令
+</span></span></code></pre></div><p>你需要的是带这个参数的：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>--control-plane --certificate-key ...
+</span></span></code></pre></div><p>配置 kubectl：
+如果也想在其他上面使用 kubectl，再分别在它们上执行这三行</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>mkdir -p $HOME/.kube
+</span></span><span style=display:flex><span>sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+</span></span><span style=display:flex><span>sudo chown <span style=color:#66d9ef>$(</span>id -u<span style=color:#66d9ef>)</span>:<span style=color:#66d9ef>$(</span>id -g<span style=color:#66d9ef>)</span> $HOME/.kube/config
+</span></span></code></pre></div><p>安装 Flannel，只用在一个节点执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+</span></span></code></pre></div><hr><h2 id=九加入另外两个-control-plane>九、加入另外两个 control-plane<a hidden class=anchor aria-hidden=true href=#九加入另外两个-control-plane>#</a></h2><p>在 <code>192.168.3.215</code> 和 <code>192.168.3.216</code> 上执行 master 初始化输出的命令。</p><p>格式类似这样：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo kubeadm join 192.168.3.217:8443 <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --token xxxxxx.xxxxxxxxxxxxxxxx <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --discovery-token-ca-cert-hash sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --control-plane <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --certificate-key xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --cri-socket<span style=color:#f92672>=</span>unix:///run/containerd/containerd.sock
+</span></span></code></pre></div><p>如果 join 命令丢了，在 <code>192.168.3.214</code> 重新生成：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubeadm token create --print-join-command
+</span></span></code></pre></div><p>重新生成 certificate key：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo kubeadm init phase upload-certs --upload-certs
+</span></span></code></pre></div><p>然后把两者组合起来。</p><hr><h2 id=十检查集群>十、检查集群<a hidden class=anchor aria-hidden=true href=#十检查集群>#</a></h2><p>在任意 master 上执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get nodes -o wide
+</span></span></code></pre></div><p>你应该看到：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>k8s-master1   Ready   control-plane
+</span></span><span style=display:flex><span>k8s-master2   Ready   control-plane
+</span></span><span style=display:flex><span>k8s-master3   Ready   control-plane
+</span></span></code></pre></div><p>查看系统 Pod：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -A -o wide
+</span></span></code></pre></div><p>查看 etcd：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n kube-system -o wide | grep etcd
+</span></span></code></pre></div><p>应该有 3 个 etcd：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>etcd-k8s-master1
+</span></span><span style=display:flex><span>etcd-k8s-master2
+</span></span><span style=display:flex><span>etcd-k8s-master3
+</span></span></code></pre></div><hr><h2 id=十一允许-control-plane-也跑业务-pod>十一、允许 control-plane 也跑业务 Pod<a hidden class=anchor aria-hidden=true href=#十一允许-control-plane-也跑业务-pod>#</a></h2><p>因为你这 3 台都是 control-plane，没有普通 worker。学习环境可以允许它们跑业务：
+一次性移除所有 Master（Control Plane）节点上的 NoSchedule污点，从而允许普通 Pod 调度到 Master 节点上运行。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl taint nodes --all node-role.kubernetes.io/control-plane-
+</span></span></code></pre></div><hr><h2 id=十二测试部署-nginx>十二、测试部署 nginx<a hidden class=anchor aria-hidden=true href=#十二测试部署-nginx>#</a></h2><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl create deployment nginx --image<span style=color:#f92672>=</span>nginx:latest
+</span></span><span style=display:flex><span>kubectl expose deployment nginx --port<span style=color:#f92672>=</span><span style=color:#ae81ff>80</span> --type<span style=color:#f92672>=</span>NodePort
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>kubectl get pods -o wide
+</span></span><span style=display:flex><span>kubectl get svc nginx
+</span></span></code></pre></div><p>假设 NodePort 是 <code>31234</code>，就可以访问：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>http://192.168.3.214:31234
+</span></span><span style=display:flex><span>http://192.168.3.215:31234
+</span></span><span style=display:flex><span>http://192.168.3.216:31234
+</span></span></code></pre></div><hr><h2 id=十三测试高可用>十三、测试高可用<a hidden class=anchor aria-hidden=true href=#十三测试高可用>#</a></h2><p>先确认 kubectl 用的是 VIP：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl config view --minify | grep server
+</span></span></code></pre></div><p>应该类似：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>server: https://192.168.3.217:8443
+</span></span></code></pre></div><p>然后可以关掉当前持有 VIP 的机器，例如 <code>192.168.3.214</code>：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo poweroff
+</span></span></code></pre></div><p>等几十秒，在其他机器上执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get nodes
+</span></span></code></pre></div><p>如果还能正常返回，说明 API Server HA 生效。</p><p>检查 VIP 是否漂移：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>ip addr | grep 192.168.3.217
+</span></span></code></pre></div><hr><h2 id=十四虚拟机集群的日常关机和启动>十四、虚拟机集群的日常关机和启动<a hidden class=anchor aria-hidden=true href=#十四虚拟机集群的日常关机和启动>#</a></h2><p>如果 K8s 集群部署在家用服务器或台式机里的虚拟机上，为了省电，晚上可以把虚拟机关掉，第二天再启动。关键点是：<strong>不要直接强制断电，尽量让每台虚拟机正常关机</strong>。</p><p>对于这套三主节点集群：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.214  k8s-master1
+</span></span><span style=display:flex><span>192.168.3.215  k8s-master2
+</span></span><span style=display:flex><span>192.168.3.216  k8s-master3
+</span></span><span style=display:flex><span>192.168.3.217  k8s-vip
+</span></span></code></pre></div><p>如果后面又加入了 worker，例如：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.218  k8s-worker1
+</span></span><span style=display:flex><span>192.168.3.219  k8s-worker2
+</span></span><span style=display:flex><span>192.168.3.220  k8s-worker3
+</span></span></code></pre></div><p>那么日常关机建议按这个顺序：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>先关业务入口和 worker
+</span></span><span style=display:flex><span>再关 control-plane/master
+</span></span></code></pre></div><p>启动时反过来：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>先启动 control-plane/master
+</span></span><span style=display:flex><span>等 API Server、etcd、CNI 正常
+</span></span><span style=display:flex><span>再启动 worker
+</span></span><span style=display:flex><span>最后检查业务 Pod
+</span></span></code></pre></div><h3 id=1-关机前检查集群状态>1. 关机前检查集群状态<a hidden class=anchor aria-hidden=true href=#1-关机前检查集群状态>#</a></h3><p>在任意一台 master 上执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get nodes -o wide
+</span></span><span style=display:flex><span>kubectl get pods -A -o wide
+</span></span></code></pre></div><p>如果安装了 Ingress、Longhorn、GitLab、SonarQube 这类有状态或入口组件，也先看一下它们是否健康：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n ingress-nginx -o wide
+</span></span><span style=display:flex><span>kubectl get pods -n longhorn-system -o wide
+</span></span><span style=display:flex><span>kubectl get pods -n gitlab -o wide
+</span></span><span style=display:flex><span>kubectl get pods -n sonarqube -o wide
+</span></span></code></pre></div><p>如果只是学习环境，通常不用把所有 Pod 都手动删掉。Kubernetes 会在节点重新启动后由 kubelet 拉起静态 Pod，并恢复 Deployment、StatefulSet、DaemonSet 管理的工作负载。</p><p>如果正在写入数据库、GitLab、Longhorn 卷，最好先停掉外部访问，等写入结束后再关机。不要在备份、迁移、镜像拉取、卷重建时直接断电。</p><h3 id=2-不建议对整套集群逐台-drain>2. 不建议对整套集群逐台 drain<a hidden class=anchor aria-hidden=true href=#2-不建议对整套集群逐台-drain>#</a></h3><p><code>kubectl drain</code> 适合“只维护一台节点，其他节点继续运行”的场景。比如只重启一个 worker，可以这样：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl drain k8s-worker1 --ignore-daemonsets --delete-emptydir-data
+</span></span><span style=display:flex><span>sudo reboot
+</span></span><span style=display:flex><span>kubectl uncordon k8s-worker1
+</span></span></code></pre></div><p>但是如果晚上要把整套虚拟机集群全部关闭，就不建议把所有节点都 drain 一遍。因为所有节点都会停，Pod 没有地方重新调度，很多 eviction 会卡住，反而增加混乱。</p><p>整套集群关机时，核心原则是：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>让业务停止写入
+</span></span><span style=display:flex><span>让每台虚拟机正常执行 shutdown/poweroff
+</span></span><span style=display:flex><span>不要强制断电
+</span></span></code></pre></div><h3 id=3-关闭-worker-节点>3. 关闭 worker 节点<a hidden class=anchor aria-hidden=true href=#3-关闭-worker-节点>#</a></h3><p>如果有 worker，先在每台 worker 上执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo shutdown -h now
+</span></span></code></pre></div><p>也可以从 master 上通过 SSH 远程执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>ssh root@192.168.3.218 <span style=color:#e6db74>&#34;shutdown -h now&#34;</span>
+</span></span><span style=display:flex><span>ssh root@192.168.3.219 <span style=color:#e6db74>&#34;shutdown -h now&#34;</span>
+</span></span><span style=display:flex><span>ssh root@192.168.3.220 <span style=color:#e6db74>&#34;shutdown -h now&#34;</span>
+</span></span></code></pre></div><p>等待虚拟机状态变成 powered off。</p><h3 id=4-使用一键关闭脚本>4. 使用一键关闭脚本<a hidden class=anchor aria-hidden=true href=#4-使用一键关闭脚本>#</a></h3><p>如果不想每次手动 SSH 到每台机器，可以使用脚本：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>static/k8s/k8s_shutdown_all.sh
+</span></span></code></pre></div><p>如果是在网站上下载：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>mkdir -p ~/k8s-ha
+</span></span><span style=display:flex><span>cd ~/k8s-ha
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>curl -fsSLO https://doc.jihw.top/k8s/k8s_env.sh
+</span></span><span style=display:flex><span>curl -fsSLO https://doc.jihw.top/k8s/k8s_shutdown_all.sh
+</span></span><span style=display:flex><span>chmod +x k8s_env.sh k8s_shutdown_all.sh
+</span></span></code></pre></div><p>先看一遍关机计划，不会真正关机：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>bash k8s_shutdown_all.sh --dry-run
+</span></span></code></pre></div><p>确认没问题后，在任意一台 master 上执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>YES<span style=color:#f92672>=</span>yes bash k8s_shutdown_all.sh
+</span></span></code></pre></div><p>脚本默认会按这个顺序执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>1. 关闭 worker: 192.168.3.218、192.168.3.219、192.168.3.220
+</span></span><span style=display:flex><span>2. 关闭远端 master
+</span></span><span style=display:flex><span>3. 最后关闭当前执行脚本的 master
+</span></span></code></pre></div><p>默认 SSH 用户是 <code>root</code>。如果不是 root，可以指定：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>SSH_USER<span style=color:#f92672>=</span>ubuntu YES<span style=color:#f92672>=</span>yes bash k8s_shutdown_all.sh
+</span></span></code></pre></div><p>如果 SSH key 不是默认位置，可以指定：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>SSH_KEY<span style=color:#f92672>=</span>~/.ssh/id_rsa YES<span style=color:#f92672>=</span>yes bash k8s_shutdown_all.sh
+</span></span></code></pre></div><p>如果还没有 worker，或者只想关闭三台 master：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>YES<span style=color:#f92672>=</span>yes bash k8s_shutdown_all.sh --no-workers
+</span></span></code></pre></div><p>如果 worker IP 不是默认这三个，用 <code>WORKER_IPS</code> 覆盖：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>WORKER_IPS<span style=color:#f92672>=</span><span style=color:#e6db74>&#34;192.168.3.221 192.168.3.222&#34;</span> YES<span style=color:#f92672>=</span>yes bash k8s_shutdown_all.sh
+</span></span></code></pre></div><p>脚本执行前会打印当前节点状态和即将关闭的机器。没有加 <code>YES=yes</code> 时，需要手动输入 <code>SHUTDOWN</code> 才会继续。</p><h3 id=5-手动关闭-master-节点>5. 手动关闭 master 节点<a hidden class=anchor aria-hidden=true href=#5-手动关闭-master-节点>#</a></h3><p>worker 关闭后，再关闭三台 master：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>sudo shutdown -h now
+</span></span></code></pre></div><p>如果从 <code>k8s-master1</code> 远程关另外两台，可以先关 <code>master2</code>、<code>master3</code>，最后关自己：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>ssh root@192.168.3.215 <span style=color:#e6db74>&#34;shutdown -h now&#34;</span>
+</span></span><span style=display:flex><span>ssh root@192.168.3.216 <span style=color:#e6db74>&#34;shutdown -h now&#34;</span>
+</span></span><span style=display:flex><span>sudo shutdown -h now
+</span></span></code></pre></div><p>三台 master 都关闭后，etcd 会整体停止。只要是正常关机，第二天全部启动后可以恢复。</p><h3 id=6-第二天启动-master>6. 第二天启动 master<a hidden class=anchor aria-hidden=true href=#6-第二天启动-master>#</a></h3><p>先启动三台 master 虚拟机：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>k8s-master1
+</span></span><span style=display:flex><span>k8s-master2
+</span></span><span style=display:flex><span>k8s-master3
+</span></span></code></pre></div><p>等系统起来后，在任意 master 上检查基础服务：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>systemctl status containerd --no-pager
+</span></span><span style=display:flex><span>systemctl status kubelet --no-pager
+</span></span><span style=display:flex><span>systemctl status haproxy --no-pager
+</span></span><span style=display:flex><span>systemctl status keepalived --no-pager
+</span></span></code></pre></div><p>再检查 VIP：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>ip addr | grep 192.168.3.217
+</span></span></code></pre></div><p>如果当前这台没有 VIP，不代表异常。只要三台 master 里有一台持有 <code>192.168.3.217</code> 即可。</p><p>检查 API Server：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get nodes -o wide
+</span></span><span style=display:flex><span>kubectl get pods -n kube-system -o wide
+</span></span></code></pre></div><p>刚启动的前几分钟，节点可能短暂显示 <code>NotReady</code>，部分 Pod 可能处于 <code>ContainerCreating</code>。等 CNI、kube-proxy、CoreDNS 都恢复后再继续。</p><h3 id=7-启动-worker>7. 启动 worker<a hidden class=anchor aria-hidden=true href=#7-启动-worker>#</a></h3><p>master 正常后，再启动 worker 虚拟机：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>k8s-worker1
+</span></span><span style=display:flex><span>k8s-worker2
+</span></span><span style=display:flex><span>k8s-worker3
+</span></span></code></pre></div><p>然后检查所有节点：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get nodes -o wide
+</span></span></code></pre></div><p>期望看到所有节点都是 <code>Ready</code>：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>k8s-master1   Ready
+</span></span><span style=display:flex><span>k8s-master2   Ready
+</span></span><span style=display:flex><span>k8s-master3   Ready
+</span></span><span style=display:flex><span>k8s-worker1   Ready
+</span></span><span style=display:flex><span>k8s-worker2   Ready
+</span></span><span style=display:flex><span>k8s-worker3   Ready
+</span></span></code></pre></div><h3 id=8-启动后检查业务>8. 启动后检查业务<a hidden class=anchor aria-hidden=true href=#8-启动后检查业务>#</a></h3><p>查看所有 Pod：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -A -o wide
+</span></span></code></pre></div><p>如果有 Pod 一直不是 <code>Running</code>，先看事件：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get events -A --sort-by<span style=color:#f92672>=</span>.lastTimestamp | tail -50
+</span></span></code></pre></div><p>再看具体 Pod：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl describe pod -n 命名空间 Pod名
+</span></span><span style=display:flex><span>kubectl logs -n 命名空间 Pod名 --tail<span style=color:#f92672>=</span><span style=color:#ae81ff>100</span>
+</span></span></code></pre></div><p>如果安装了 Longhorn，重点确认卷和副本恢复：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n longhorn-system -o wide
+</span></span><span style=display:flex><span>kubectl get volumes.longhorn.io -n longhorn-system
+</span></span></code></pre></div><p>如果安装了 ingress-nginx，确认入口 IP 还在：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get svc -n ingress-nginx
+</span></span></code></pre></div><p>如果业务域名访问不了，先检查 <code>EXTERNAL-IP</code> 是否仍然是原来的地址，比如：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.230
+</span></span></code></pre></div><h3 id=9-常见问题>9. 常见问题<a hidden class=anchor aria-hidden=true href=#9-常见问题>#</a></h3><p>如果 <code>kubectl get nodes</code> 连接不上，先确认 VIP 和 HAProxy：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>ip addr | grep 192.168.3.217
+</span></span><span style=display:flex><span>systemctl status haproxy --no-pager
+</span></span><span style=display:flex><span>systemctl status keepalived --no-pager
+</span></span></code></pre></div><p>如果节点是 <code>NotReady</code>，看 kubelet 和容器运行时：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>systemctl status kubelet --no-pager
+</span></span><span style=display:flex><span>systemctl status containerd --no-pager
+</span></span><span style=display:flex><span>journalctl -u kubelet -n <span style=color:#ae81ff>100</span> --no-pager
+</span></span></code></pre></div><p>如果 CoreDNS、应用 Pod 一直起不来，检查 CNI：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n kube-flannel -o wide
+</span></span><span style=display:flex><span>kubectl get pods -n kube-system -o wide
+</span></span></code></pre></div><p>如果只有某一台 master 没起来，不要急着执行 <code>kubeadm reset</code>。先看服务状态和日志。三节点 etcd 可以容忍一台 master 暂时不可用；但如果三台里只有一台启动，etcd 多数派不足，集群可能暂时不可用。把三台 master 都启动后再判断。</p><hr><h2 id=十五metallbingress>十五、MetalLB、Ingress<a hidden class=anchor aria-hidden=true href=#十五metallbingress>#</a></h2><p>先说明三个组件的作用：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>MetalLB：
+</span></span><span style=display:flex><span>给裸机/家用 K8s 提供 LoadBalancer 能力。云厂商有云负载均衡，家里没有，所以用 MetalLB 从你的局域网里分配一个 IP。
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>ingress-nginx：
+</span></span><span style=display:flex><span>K8s 里的 HTTP/HTTPS 入口控制器。它根据域名、路径，把请求转发到不同 Service。
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>Ingress：
+</span></span><span style=display:flex><span>一条路由规则。例如 nginx.k8s.local/* -&gt; nginx-demo:80。
+</span></span></code></pre></div><p><strong>0. 先确认集群状态</strong></p><p>在任意 master 上执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get nodes -o wide
+</span></span><span style=display:flex><span>kubectl get pods -A -o wide
+</span></span></code></pre></div><p>如果你是三台 master 都跑业务 Pod，确认 taint 已移除：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl taint nodes --all node-role.kubernetes.io/control-plane- <span style=color:#f92672>||</span> true
+</span></span></code></pre></div><p>如果有资源，不用急着删，下面的 <code>kubectl apply</code> 可以重复执行。</p><p><strong>1. 规划 MetalLB 地址池</strong></p><p>你家里 K8s 节点是：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.214
+</span></span><span style=display:flex><span>192.168.3.215
+</span></span><span style=display:flex><span>192.168.3.216
+</span></span></code></pre></div><p>建议预留：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.230-192.168.3.240
+</span></span></code></pre></div><p>注意：最好去主路由 DHCP 设置里确认这段不会分配给普通设备，避免 IP 冲突。</p><p><strong>2. 安装 MetalLB</strong></p><p>执行：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.16.1/config/manifests/metallb-native.yaml
+</span></span></code></pre></div><p>等待组件启动：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n metallb-system -o wide
+</span></span></code></pre></div><p>正常会看到：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>controller
+</span></span><span style=display:flex><span>speaker
+</span></span></code></pre></div><p>其中：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>controller：负责分配 LoadBalancer IP
+</span></span><span style=display:flex><span>speaker：负责在局域网里宣告这个 IP，让其他设备能访问
+</span></span></code></pre></div><p>等待 controller 可用：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl wait --namespace metallb-system <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --for<span style=color:#f92672>=</span>condition<span style=color:#f92672>=</span>available deployment/controller <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --timeout<span style=color:#f92672>=</span>180s
+</span></span></code></pre></div><p><strong>3. 配置 MetalLB 地址池</strong></p><p>创建地址池和二层广播配置：
+一定等上面的组件启动成功后才能执行</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39; | kubectl apply -f -
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>apiVersion: metallb.io/v1beta1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>kind: IPAddressPool
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>metadata:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  name: home-lan-pool
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  namespace: metallb-system
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>spec:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  addresses:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    - 192.168.3.230-192.168.3.240
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>---
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>apiVersion: metallb.io/v1beta1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>kind: L2Advertisement
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>metadata:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  name: home-lan-l2
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  namespace: metallb-system
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>spec:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  ipAddressPools:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    - home-lan-pool
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p>解释：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>IPAddressPool：
+</span></span><span style=display:flex><span>告诉 MetalLB 可以使用哪些 IP。
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>L2Advertisement：
+</span></span><span style=display:flex><span>让 MetalLB 用 ARP/NDP 在局域网里声明这些 IP 属于某个节点。
+</span></span></code></pre></div><p>检查：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get ipaddresspool -n metallb-system
+</span></span><span style=display:flex><span>kubectl get l2advertisement -n metallb-system
+</span></span></code></pre></div><p><strong>4. 先单独测试 MetalLB</strong></p><p>创建一个测试 nginx LoadBalancer：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl create deployment lb-test-nginx --image<span style=color:#f92672>=</span>nginx:latest
+</span></span><span style=display:flex><span>kubectl expose deployment lb-test-nginx --port<span style=color:#f92672>=</span><span style=color:#ae81ff>80</span> --type<span style=color:#f92672>=</span>LoadBalancer
+</span></span></code></pre></div><p>查看外部 IP：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get svc lb-test-nginx -w
+</span></span></code></pre></div><p>集群内部访问 https://192.168.3.230 是通的
+已运行 3 条命令
+关键点找到了：三台节点都有这个 label：</p><p>node.kubernetes.io/exclude-from-external-load-balancers=</p><p>你应该看到类似：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>EXTERNAL-IP: 192.168.3.230
+</span></span></code></pre></div><p>如果一直是：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>&lt;pending&gt;
+</span></span></code></pre></div><p>说明 MetalLB 地址池还没生效。</p><p>测试访问：
+目前虚拟机方式部署的k8s无法使用该地址访问</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>curl http://192.168.3.230
+</span></span></code></pre></div><p>如果在 Windows 浏览器里访问也可以：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>http://192.168.3.230
+</span></span></code></pre></div><p>成功后可以删除这个临时测试：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl delete deployment lb-test-nginx
+</span></span><span style=display:flex><span>kubectl delete svc lb-test-nginx
+</span></span></code></pre></div><p><strong>5. 安装 Helm</strong></p><p>后面部署很多 K8s 应用都会用 Helm。可以理解为：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>Helm = K8s 的包管理器
+</span></span></code></pre></div><p>安装：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+</span></span></code></pre></div><p>检查：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>helm version
+</span></span></code></pre></div><p><strong>6. 安装 ingress-nginx</strong></p><p>添加仓库：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+</span></span><span style=display:flex><span>helm repo update
+</span></span></code></pre></div><p>安装 ingress-nginx，并让它创建 <code>LoadBalancer</code> 类型 Service：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --namespace ingress-nginx <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --create-namespace <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set controller.service.type<span style=color:#f92672>=</span>LoadBalancer <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --set controller.ingressClassResource.default<span style=color:#f92672>=</span>true
+</span></span></code></pre></div><p>解释：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>controller.service.type=LoadBalancer：
+</span></span><span style=display:flex><span>让 MetalLB 给 ingress-nginx 分配一个局域网 IP。
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>controller.ingressClassResource.default=true：
+</span></span><span style=display:flex><span>让默认 IngressClass 使用 nginx。
+</span></span></code></pre></div><p>等待启动：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl wait --namespace ingress-nginx <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --for<span style=color:#f92672>=</span>condition<span style=color:#f92672>=</span>ready pod <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --selector<span style=color:#f92672>=</span>app.kubernetes.io/component<span style=color:#f92672>=</span>controller <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --timeout<span style=color:#f92672>=</span>180s
+</span></span></code></pre></div><p>查看入口 IP：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get svc -n ingress-nginx
+</span></span></code></pre></div><p>你应该看到：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>ingress-nginx-controller   LoadBalancer   ...   192.168.3.230/231...
+</span></span></code></pre></div><p>记住这个 <code>EXTERNAL-IP</code>，后面假设它是：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.230
+</span></span></code></pre></div><p>你实际以命令输出为准。</p><p><strong>7. 创建 nginx Ingress 测试应用</strong></p><p>创建 namespace：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl create namespace demo
+</span></span></code></pre></div><p>创建 nginx Deployment：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl create deployment nginx-demo <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --image<span style=color:#f92672>=</span>nginx:latest <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --port<span style=color:#f92672>=</span><span style=color:#ae81ff>80</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -n demo
+</span></span></code></pre></div><p>创建 ClusterIP Service：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl expose deployment nginx-demo <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --port<span style=color:#f92672>=</span><span style=color:#ae81ff>80</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  --target-port<span style=color:#f92672>=</span><span style=color:#ae81ff>80</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span>  -n demo
+</span></span></code></pre></div><p>创建 Ingress：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>cat <span style=color:#e6db74>&lt;&lt;&#39;EOF&#39; | kubectl apply -f -
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>apiVersion: networking.k8s.io/v1
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>kind: Ingress
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>metadata:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  name: nginx-demo
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  namespace: demo
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>spec:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  ingressClassName: nginx
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>  rules:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>    - host: nginx.k8s.local
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>      http:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>        paths:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>          - path: /
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            pathType: Prefix
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>            backend:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>              service:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                name: nginx-demo
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                port:
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>                  number: 80
+</span></span></span><span style=display:flex><span><span style=color:#e6db74>EOF</span>
+</span></span></code></pre></div><p>解释：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>nginx-demo Deployment：
+</span></span><span style=display:flex><span>真正运行 nginx 容器。
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>nginx-demo Service：
+</span></span><span style=display:flex><span>给 Pod 提供一个稳定的集群内访问入口。
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>nginx-demo Ingress：
+</span></span><span style=display:flex><span>告诉 ingress-nginx：访问 nginx.k8s.local 时转发到 nginx-demo Service。
+</span></span></code></pre></div><p><strong>8. 测试 Ingress</strong></p><p>先查 ingress-nginx 的外部 IP：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get svc -n ingress-nginx ingress-nginx-controller
+</span></span></code></pre></div><p>假设是：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.230
+</span></span></code></pre></div><p>用 curl 测试，不需要改 DNS：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>curl -H <span style=color:#e6db74>&#34;Host: nginx.k8s.local&#34;</span> http://192.168.3.230
+</span></span></code></pre></div><p>如果返回 nginx 欢迎页 HTML，说明成功。</p><p>如果想浏览器访问，在 Windows 的 hosts 文件里加：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>192.168.3.230 nginx.k8s.local
+</span></span></code></pre></div><p>Windows hosts 路径：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>C:\Windows\System32\drivers\etc\hosts
+</span></span></code></pre></div><p>然后浏览器打开：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>http://nginx.k8s.local
+</span></span></code></pre></div><p><strong>9. 排查命令</strong></p><p>如果 <code>EXTERNAL-IP</code> 是 <code>&lt;pending></code>：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n metallb-system
+</span></span><span style=display:flex><span>kubectl describe svc -n ingress-nginx ingress-nginx-controller
+</span></span><span style=display:flex><span>kubectl get ipaddresspool -n metallb-system
+</span></span><span style=display:flex><span>kubectl get l2advertisement -n metallb-system
+</span></span></code></pre></div><p>如果 ingress-nginx Pod 没起来：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n ingress-nginx -o wide
+</span></span><span style=display:flex><span>kubectl describe pod -n ingress-nginx -l app.kubernetes.io/component<span style=color:#f92672>=</span>controller
+</span></span><span style=display:flex><span>kubectl logs -n ingress-nginx -l app.kubernetes.io/component<span style=color:#f92672>=</span>controller
+</span></span></code></pre></div><p>如果 curl 返回 404：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get ingress -n demo
+</span></span><span style=display:flex><span>kubectl describe ingress nginx-demo -n demo
+</span></span></code></pre></div><p>通常是 Host 不匹配，确认你用了：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>curl -H <span style=color:#e6db74>&#34;Host: nginx.k8s.local&#34;</span> http://入口IP
+</span></span></code></pre></div><p>如果返回 502/503：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get pods -n demo -o wide
+</span></span><span style=display:flex><span>kubectl get svc -n demo
+</span></span><span style=display:flex><span>kubectl get endpoints -n demo
+</span></span></code></pre></div><p>通常是 Service 没选中 Pod。</p><p><strong>10. 成功后的状态应该是</strong></p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get svc -n ingress-nginx
+</span></span></code></pre></div><p>看到：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>ingress-nginx-controller   LoadBalancer   192.168.3.xxx
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>kubectl get ingress -n demo
+</span></span></code></pre></div><p>看到：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>nginx-demo   nginx   nginx.k8s.local
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-bash data-lang=bash><span style=display:flex><span>curl -H <span style=color:#e6db74>&#34;Host: nginx.k8s.local&#34;</span> http://192.168.3.xxx
+</span></span></code></pre></div><p>返回 nginx 页面。</p><p>到这里，你就完成了：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>MetalLB + ingress-nginx + Ingress 路由
+</span></span></code></pre></div></div><footer class=post-footer><ul class=post-tags></ul><nav class=paginav><a class=prev href=/coding/ubuntu-getting-started/><span class=title>« 上一页</span>
+<span>Ubuntu Getting Started</span>
+</a><a class=next href=/learning/money-money-home/><span class=title>下一页 »</span>
+<span>普通人挣钱的三条路</span></a></nav></footer></article></main><footer class=footer><span>&copy; 2026 <a href=/>老约翰的生活</a></span> ·
+<span>Powered by
+<a href=https://gohugo.io/ rel="noopener noreferrer" target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top id=top-link class="top-link hidden" aria-label="go to top" title="Go to Top (Alt + G)" accesskey=g><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevrons-up"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+</a><script defer src=https://static.cloudflareinsights.com/beacon.min.js data-cf-beacon='{"token":"5e6d89f81ac94c789c577458cbb90e0b"}'></script><script>let menu=document.getElementById("menu");if(menu){const e=localStorage.getItem("menu-scroll-position");e&&(menu.scrollLeft=parseInt(e,10)),menu.onscroll=function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)}}document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var t=this.getAttribute("href").substr(1);window.matchMedia("(prefers-reduced-motion: reduce)").matches?document.querySelector(`[id='${decodeURIComponent(t)}']`).scrollIntoView():document.querySelector(`[id='${decodeURIComponent(t)}']`).scrollIntoView({behavior:"smooth"}),t==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${t}`)})})</script><script>var toplink=document.getElementById("top-link");window.onscroll=function(){const e=window.innerHeight;document.body.scrollTop>e||document.documentElement.scrollTop>e?toplink.classList.remove("hidden"):toplink.classList.add("hidden")}</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{const e=document.querySelector("html");e.dataset.theme==="dark"?(e.dataset.theme="light",localStorage.setItem("pref-theme","light")):(e.dataset.theme="dark",localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="复制";function s(){t.innerHTML="已复制！",setTimeout(()=>{t.innerHTML="复制"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>

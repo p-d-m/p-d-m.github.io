@@ -1,0 +1,31 @@
+# DaemonSet 确保每个匹配的节点上运行一个 Pod。
+# 常见用途：日志采集、监控 Agent、网络插件、存储插件。
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: demo-agent
+  namespace: demo
+spec:
+  selector:
+    matchLabels:
+      app: demo-agent
+  template:
+    metadata:
+      labels:
+        app: demo-agent
+    spec:
+      containers:
+        - name: agent
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - "while true; do echo running on $(hostname); sleep 30; done"
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+

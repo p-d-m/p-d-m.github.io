@@ -1,0 +1,16 @@
+# RoleBinding 把 Role 绑定给用户、组或 ServiceAccount。
+# 下面示例把 demo-pod-reader 权限授予 demo-reader ServiceAccount。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: demo-reader-binding
+  namespace: demo
+subjects:
+  - kind: ServiceAccount
+    name: demo-reader
+    namespace: demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: demo-pod-reader
+

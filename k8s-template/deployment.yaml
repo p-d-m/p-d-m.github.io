@@ -1,0 +1,66 @@
+# Deployment 用来管理无状态应用，支持副本数、滚动更新和回滚。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+  namespace: demo
+spec:
+  # 应用副本数量。
+  replicas: 3
+  selector:
+    matchLabels:
+      app: demo-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # 滚动更新时最多额外创建 1 个 Pod。
+      maxSurge: 1
+      # 更新过程中最多允许 1 个 Pod 不可用。
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: demo-app
+    spec:
+      # 尽量把副本分散到不同节点。
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: demo-app
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          envFrom:
+            # 从 ConfigMap 读取普通配置。
+            - configMapRef:
+                name: demo-config
+            # 从 Secret 读取敏感配置。
+            - secretRef:
+                name: demo-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+

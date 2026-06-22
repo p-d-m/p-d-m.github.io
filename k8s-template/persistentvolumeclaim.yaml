@@ -1,0 +1,17 @@
+# PersistentVolumeClaim 用来申请持久化存储。
+# Pod 删除后，PVC 通常仍会保留，具体取决于 StorageClass 的回收策略。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: demo-data
+  namespace: demo
+spec:
+  # RWO 表示同一时间通常只能被一个节点读写挂载。
+  # 如果多副本跨节点共享，需要支持 RWX 的存储。
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 5Gi
+

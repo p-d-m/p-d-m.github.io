@@ -1,0 +1,20 @@
+# Service 为一组 Pod 提供稳定访问入口。
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app
+  namespace: demo
+spec:
+  # ClusterIP 表示只在集群内部访问。
+  # 常见类型：ClusterIP、NodePort、LoadBalancer。
+  type: ClusterIP
+  selector:
+    # 匹配带 app=demo-app 标签的 Pod。
+    app: demo-app
+  ports:
+    - name: http
+      # Service 暴露的端口。
+      port: 80
+      # Pod 容器端口名或端口号。
+      targetPort: http
+

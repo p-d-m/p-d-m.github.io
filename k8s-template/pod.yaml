@@ -1,0 +1,39 @@
+# Pod 是 Kubernetes 最小调度单位。
+# 实际生产中通常不直接创建 Pod，而是通过 Deployment/StatefulSet/DaemonSet 管理。
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-pod
+  namespace: demo
+  labels:
+    # Service 通常通过这个标签选择 Pod。
+    app: demo-app
+spec:
+  containers:
+    - name: app
+      image: nginx:1.27-alpine
+      imagePullPolicy: IfNotPresent
+      ports:
+        - name: http
+          containerPort: 80
+      # requests 是调度依据，表示这个 Pod 至少需要多少资源。
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+      # readinessProbe 决定 Pod 是否加入 Service 后端。
+      readinessProbe:
+        httpGet:
+          path: /
+          port: http
+        periodSeconds: 10
+      # livenessProbe 用于发现应用卡死并重启容器。
+      livenessProbe:
+        httpGet:
+          path: /
+          port: http
+        periodSeconds: 30
+

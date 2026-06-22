@@ -1,0 +1,18 @@
+# Role 定义某个 Namespace 内的权限。
+# 下面示例允许读取 demo Namespace 中的 Pod。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: demo-pod-reader
+  namespace: demo
+rules:
+  - apiGroups:
+      # 空字符串表示 core API group，例如 Pod、Service、ConfigMap。
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+

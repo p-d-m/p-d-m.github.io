@@ -1,0 +1,21 @@
+# Job 用来运行一次性任务。
+# 任务成功完成后，Pod 状态会变成 Completed。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: demo-job
+  namespace: demo
+spec:
+  # 失败后最多重试 3 次。
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: job
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - "echo start job && date && echo done"
+
